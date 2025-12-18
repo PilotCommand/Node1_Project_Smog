@@ -1,11 +1,12 @@
 /**
- * main.js — Bootstrap + render loop
+ * main.js â€” Bootstrap + render loop
  * 
  * Creates the Three.js core and wires all modules together.
  * Owns: scene, camera, renderer, appState, animation loop
  */
 
 import * as THREE from 'three';
+import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { initMap, disposeMap } from './map.js';
 import { initControls, updateControls } from './controls.js';
 import { initHUD, updateHUD } from './hud.js';
@@ -20,10 +21,7 @@ import { initSky, setTimeOfDay, updateSky, getTimeLabel } from './chronograph.js
 export const appState = {
   paused: false,
   simTime: 0,
-  frameCount: 0,
-  fps: 60,
-  lastFpsUpdate: 0,
-  fpsFrames: 0
+  frameCount: 0
 };
 
 export const settings = {
@@ -44,6 +42,7 @@ export const settings = {
   timeOfDay: 10,         // 0-24 hour scale
   autoTime: false,       // Auto-cycle time
   autoTimeSpeed: 0.5,    // Hours per real second when auto
+  brightness: 1.0,       // Lighting intensity multiplier
   
   // Simulation
   timeScale: 1.0         // simulation speed multiplier
@@ -54,6 +53,7 @@ export const settings = {
 // ============================================
 let scene, camera, renderer;
 let clock;
+let stats;
 
 function initThree() {
   // Scene
@@ -88,6 +88,16 @@ function initThree() {
   // Clock for delta time
   clock = new THREE.Clock();
   
+  // Stats panel (FPS counter)
+  stats = new Stats();
+  stats.showPanel(0); // 0: fps, 1: ms, 2: mb
+  stats.dom.style.position = 'fixed';
+  stats.dom.style.bottom = '20px';
+  stats.dom.style.right = '20px';
+  stats.dom.style.top = 'auto';
+  stats.dom.style.left = 'auto';
+  document.body.appendChild(stats.dom);
+  
   // Handle resize
   window.addEventListener('resize', onWindowResize);
 }
@@ -102,14 +112,14 @@ function onWindowResize() {
 // Initialization
 // ============================================
 async function init() {
-  console.log('🌁 Initializing Bay Area Air Quality Simulator...');
+  console.log('ðŸŒ Initializing Bay Area Air Quality Simulator...');
   
   // Initialize Three.js
   initThree();
   
   // Initialize sky system (must be before map for proper lighting)
   initSky(scene);
-  setTimeOfDay(settings.timeOfDay, scene);
+  setTimeOfDay(settings.timeOfDay, scene, settings.brightness);
   
   // Initialize modules in order
   const mapData = initMap(scene);
@@ -122,9 +132,9 @@ async function init() {
   initHUD(settings, {
     onChangeSettings: (newSettings) => {
       Object.assign(settings, newSettings);
-      // Update sky if time changed
-      if ('timeOfDay' in newSettings) {
-        setTimeOfDay(settings.timeOfDay, scene);
+      // Update sky if time or brightness changed
+      if ('timeOfDay' in newSettings || 'brightness' in newSettings) {
+        setTimeOfDay(settings.timeOfDay, scene, settings.brightness);
       }
     },
     onReset: () => {
@@ -137,7 +147,7 @@ async function init() {
     }
   });
   
-  console.log('✅ Initialization complete. Starting simulation...');
+  console.log('âœ… Initialization complete. Starting simulation...');
   
   // Start animation loop
   animate();
@@ -149,16 +159,9 @@ async function init() {
 function animate() {
   requestAnimationFrame(animate);
   
-  const dt = clock.getDelta();
+  stats.begin();
   
-  // FPS calculation
-  appState.fpsFrames++;
-  const now = performance.now();
-  if (now - appState.lastFpsUpdate >= 1000) {
-    appState.fps = appState.fpsFrames;
-    appState.fpsFrames = 0;
-    appState.lastFpsUpdate = now;
-  }
+  const dt = clock.getDelta();
   
   // Update controls
   updateControls(dt);
@@ -169,7 +172,7 @@ function animate() {
     if (settings.timeOfDay >= 24) {
       settings.timeOfDay -= 24;
     }
-    setTimeOfDay(settings.timeOfDay, scene);
+    setTimeOfDay(settings.timeOfDay, scene, settings.brightness);
   }
   
   // Update sky
@@ -186,7 +189,6 @@ function animate() {
   updateHUD({
     particleCount: getParticleCount(),
     simTime: appState.simTime,
-    fps: appState.fps,
     paused: appState.paused,
     timeOfDay: settings.timeOfDay,
     timeLabel: getTimeLabel(settings.timeOfDay)
@@ -194,6 +196,8 @@ function animate() {
   
   // Render
   renderer.render(scene, camera);
+  
+  stats.end();
   
   appState.frameCount++;
 }

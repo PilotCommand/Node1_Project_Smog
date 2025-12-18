@@ -1,5 +1,5 @@
 /**
- * hud.js — UI overlay (HTML)
+ * hud.js â€” UI overlay (HTML)
  * 
  * Provides user controls and feedback without touching simulation internals.
  * Owns: HTML overlay, event listeners, sliders/toggles
@@ -13,7 +13,7 @@ let elements = {};
 // ============================================
 
 export function initHUD(settings, cbs) {
-  console.log('🖥️ Initializing HUD...');
+  console.log('ðŸ–¥ï¸ Initializing HUD...');
   
   callbacks = cbs;
   
@@ -26,6 +26,10 @@ export function initHUD(settings, cbs) {
     autoTimeSpeed: document.getElementById('auto-time-speed'),
     autoSpeedValue: document.getElementById('auto-speed-value'),
     autoSpeedGroup: document.getElementById('auto-speed-group'),
+    
+    // Brightness
+    brightness: document.getElementById('brightness'),
+    brightnessValue: document.getElementById('brightness-value'),
     
     // Sliders
     windDirection: document.getElementById('wind-direction'),
@@ -50,8 +54,7 @@ export function initHUD(settings, cbs) {
     
     // Stats
     particleCount: document.getElementById('particle-count'),
-    simTime: document.getElementById('sim-time'),
-    fps: document.getElementById('fps')
+    simTime: document.getElementById('sim-time')
   };
   
   // Set initial values from settings
@@ -83,9 +86,14 @@ function syncFromSettings(settings) {
     elements.autoSpeedGroup.style.opacity = settings.autoTime ? '1' : '0.5';
   }
   
+  if (elements.brightness) {
+    elements.brightness.value = settings.brightness;
+    elements.brightnessValue.textContent = `${Math.round(settings.brightness * 100)}%`;
+  }
+  
   if (elements.windDirection) {
     elements.windDirection.value = settings.windDirection;
-    elements.windDirValue.textContent = `${settings.windDirection}°`;
+    elements.windDirValue.textContent = `${settings.windDirection}Â°`;
   }
   
   if (elements.windSpeed) {
@@ -143,6 +151,13 @@ function attachListeners(settings) {
     callbacks.onChangeSettings?.({ autoTimeSpeed: value });
   });
   
+  // Brightness
+  elements.brightness?.addEventListener('input', (e) => {
+    const value = parseFloat(e.target.value);
+    elements.brightnessValue.textContent = `${Math.round(value * 100)}%`;
+    callbacks.onChangeSettings?.({ brightness: value });
+  });
+  
   // Time Preset Buttons
   document.querySelectorAll('.time-preset').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -156,7 +171,7 @@ function attachListeners(settings) {
   // Wind Direction
   elements.windDirection?.addEventListener('input', (e) => {
     const value = parseFloat(e.target.value);
-    elements.windDirValue.textContent = `${value}°`;
+    elements.windDirValue.textContent = `${value}Â°`;
     callbacks.onChangeSettings?.({ windDirection: value });
   });
   
@@ -243,11 +258,6 @@ export function updateHUD(state) {
     const seconds = totalSeconds % 60;
     elements.simTime.textContent = 
       `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  }
-  
-  // FPS
-  if (elements.fps) {
-    elements.fps.textContent = state.fps;
   }
   
   // Pause button text

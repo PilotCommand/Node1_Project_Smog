@@ -34,11 +34,33 @@
       position: fixed;
       top: 20px;
       left: 20px;
+      bottom: 20px;
       z-index: 100;
       display: flex;
       flex-direction: column;
       gap: 16px;
       max-width: 320px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 10px;
+    }
+
+    #hud::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #hud::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+
+    #hud::-webkit-scrollbar-thumb {
+      background: rgba(78, 205, 196, 0.3);
+      border-radius: 3px;
+    }
+
+    #hud::-webkit-scrollbar-thumb:hover {
+      background: rgba(78, 205, 196, 0.5);
     }
 
     .hud-panel {
@@ -267,8 +289,8 @@
 
     #info-panel {
       position: fixed;
-      bottom: 20px;
-      left: 20px;
+      top: 60px;
+      right: 20px;
       z-index: 100;
     }
 
@@ -376,6 +398,14 @@
         </div>
         <input type="range" id="auto-time-speed" min="0.1" max="2" step="0.1" value="0.5" disabled>
       </div>
+      
+      <div class="control-group" style="margin-top: 12px;">
+        <div class="control-label">
+          Brightness
+          <span class="control-value" id="brightness-value">100%</span>
+        </div>
+        <input type="range" id="brightness" min="0.2" max="2.5" step="0.1" value="1">
+      </div>
     </div>
     
     <div class="hud-panel">
@@ -384,7 +414,7 @@
       <div class="control-group">
         <div class="control-label">
           Wind Direction
-          <span class="control-value" id="wind-dir-value">225°</span>
+          <span class="control-value" id="wind-dir-value">225Â°</span>
         </div>
         <input type="range" id="wind-direction" min="0" max="360" value="225">
       </div>
@@ -436,7 +466,7 @@
       <div class="toggle-row">
         <span class="toggle-label">
           <span class="pollutant-dot ozone"></span>
-          O₃
+          Oâ‚ƒ
         </span>
         <div class="toggle-switch active" id="toggle-ozone"></div>
       </div>
@@ -461,10 +491,6 @@
         <div class="stat">
           <div class="stat-value" id="sim-time">00:00</div>
           <div class="stat-label">Sim Time</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" id="fps">60</div>
-          <div class="stat-label">FPS</div>
         </div>
       </div>
     </div>

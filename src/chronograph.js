@@ -1,5 +1,5 @@
 /**
- * sky.js — Dynamic sky and lighting system
+ * sky.js â€” Dynamic sky and lighting system
  * 
  * Handles time-of-day transitions with changing sky colors,
  * sun/moon positioning, and atmospheric lighting.
@@ -175,7 +175,7 @@ const currentColors = {
 // ============================================
 
 export function initSky(sceneRef) {
-  console.log('🌅 Initializing sky system...');
+  console.log('ðŸŒ… Initializing sky system...');
   scene = sceneRef;
   
   createSkyDome();
@@ -385,7 +385,7 @@ function createLighting() {
 // Time of Day Update
 // ============================================
 
-export function setTimeOfDay(hour, scene) {
+export function setTimeOfDay(hour, scene, brightness = 1.0) {
   // hour is 0-24
   const normalizedHour = ((hour % 24) + 24) % 24;
   
@@ -448,16 +448,20 @@ export function setTimeOfDay(hour, scene) {
   }
   scene.background = currentColors.fog.clone();
   
-  // Apply lighting
+  // Apply lighting with brightness multiplier
   if (ambientLight) {
     ambientLight.color.copy(currentColors.ambient);
-    ambientLight.intensity = ambientIntensity;
+    ambientLight.intensity = ambientIntensity * brightness;
   }
   
   if (sunLight) {
     sunLight.color.copy(currentColors.sunColor);
-    sunLight.intensity = sunIntensity;
+    sunLight.intensity = sunIntensity * brightness;
     sunLight.position.copy(sunPos);
+  }
+  
+  if (fillLight) {
+    fillLight.intensity = 0.2 * brightness;
   }
   
   // Update sun mesh position and visibility

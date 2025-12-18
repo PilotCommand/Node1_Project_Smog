@@ -1,11 +1,95 @@
 /**
  * map.js — Terrain + landmarks + coordinate conventions
  * 
- * Builds the Bay Area world representation.
+ * Builds the Bay Area world representation using real elevation data from GeoTIFF.
  * Owns: terrain mesh, water plane, landmark meshes, coordinate mapping
  */
 
 import * as THREE from 'three';
+
+// ============================================
+// Simple TIFF Parser (for uncompressed 32-bit float GeoTIFF)
+// ============================================
+
+async function parseGeoTIFF(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  
+  // Check byte order (II = little-endian, MM = big-endian)
+  const byteOrder = view.getUint16(0, true);
+  const littleEndian = (byteOrder === 0x4949); // 'II'
+  
+  // Verify TIFF magic number
+  const magic = view.getUint16(2, littleEndian);
+  if (magic !== 42) throw new Error('Not a valid TIFF file');
+  
+  // Get IFD offset
+  const ifdOffset = view.getUint32(4, littleEndian);
+  
+  // Read IFD entries
+  const numEntries = view.getUint16(ifdOffset, littleEndian);
+  
+  let width = 0, height = 0, bitsPerSample = 0, stripOffsets = [], stripByteCounts = [];
+  let rowsPerStrip = 0, sampleFormat = 1;
+  
+  for (let i = 0; i < numEntries; i++) {
+    const entryOffset = ifdOffset + 2 + i * 12;
+    const tag = view.getUint16(entryOffset, littleEndian);
+    const type = view.getUint16(entryOffset + 2, littleEndian);
+    const count = view.getUint32(entryOffset + 4, littleEndian);
+    const valueOffset = entryOffset + 8;
+    
+    // Read value based on type and count
+    const getValue = () => {
+      if (type === 3) return view.getUint16(valueOffset, littleEndian); // SHORT
+      if (type === 4) return view.getUint32(valueOffset, littleEndian); // LONG
+      return view.getUint32(valueOffset, littleEndian);
+    };
+    
+    const getValues = (offset) => {
+      const values = [];
+      const actualOffset = count > 1 ? view.getUint32(valueOffset, littleEndian) : valueOffset;
+      for (let j = 0; j < count; j++) {
+        if (type === 3) values.push(view.getUint16(actualOffset + j * 2, littleEndian));
+        else if (type === 4) values.push(view.getUint32(actualOffset + j * 4, littleEndian));
+      }
+      return values;
+    };
+    
+    switch (tag) {
+      case 256: width = getValue(); break;           // ImageWidth
+      case 257: height = getValue(); break;          // ImageLength
+      case 258: bitsPerSample = getValue(); break;   // BitsPerSample
+      case 273: stripOffsets = getValues(); break;   // StripOffsets
+      case 278: rowsPerStrip = getValue(); break;    // RowsPerStrip
+      case 279: stripByteCounts = getValues(); break; // StripByteCounts
+      case 339: sampleFormat = getValue(); break;    // SampleFormat (3 = float)
+    }
+  }
+  
+  console.log(`  → TIFF: ${width}x${height}, ${bitsPerSample}-bit, format=${sampleFormat}`);
+  
+  // Read the raster data
+  const pixelCount = width * height;
+  const data = new Float32Array(pixelCount);
+  
+  if (bitsPerSample === 32 && sampleFormat === 3) {
+    // 32-bit float
+    let pixelIndex = 0;
+    for (let s = 0; s < stripOffsets.length; s++) {
+      const offset = stripOffsets[s];
+      const byteCount = stripByteCounts[s];
+      const floatCount = byteCount / 4;
+      
+      for (let i = 0; i < floatCount && pixelIndex < pixelCount; i++) {
+        data[pixelIndex++] = view.getFloat32(offset + i * 4, littleEndian);
+      }
+    }
+  } else {
+    throw new Error(`Unsupported TIFF format: ${bitsPerSample}-bit, sampleFormat=${sampleFormat}`);
+  }
+  
+  return { width, height, data };
+}
 
 // ============================================
 // Constants & Configuration
@@ -14,11 +98,18 @@ import * as THREE from 'three';
 // World scale: 1 unit ≈ 1 km
 const WORLD_SCALE = 1;
 
-// Bay Area bounds (simplified rectangle)
+// Bay Area bounds (accurate to TIFF coverage)
 const MAP_BOUNDS = {
-  width: 100,   // ~100km east-west
-  depth: 120,   // ~120km north-south
-  maxHeight: 8  // max terrain height
+  width: 151,   // 151 km east-west
+  depth: 134,   // 134 km north-south
+  maxHeight: 25 // max terrain height in world units
+};
+
+// Terrain configuration for GeoTIFF
+const TERRAIN_CONFIG = {
+  heightmapUrl: '/baymerge.tif',
+  verticalScale: 0.008,  // 8× exaggeration for visible relief
+  smoothingPasses: 2,    // Number of smoothing iterations (0 = none)
 };
 
 // Landmark positions (approximate, centered on SF Bay)
@@ -42,6 +133,77 @@ const LANDMARKS = {
 
 // Store references
 let terrain, water, landmarkMeshes = [], gridHelper;
+let elevationData = null;  // Float32Array from GeoTIFF
+let rasterWidth = 0;
+let rasterHeight = 0;
+let minElevation = Infinity;
+let maxElevation = -Infinity;
+
+// ============================================
+// Elevation Smoothing (Gaussian-like blur)
+// ============================================
+
+function smoothElevationData(data, width, height, passes = 1) {
+  if (passes <= 0) return data;
+  
+  console.log(`  → Smoothing elevation data (${passes} passes)...`);
+  
+  let current = new Float32Array(data);
+  let next = new Float32Array(data.length);
+  
+  // 3x3 Gaussian-ish kernel weights
+  const kernel = [
+    1, 2, 1,
+    2, 4, 2,
+    1, 2, 1
+  ];
+  const kernelSum = 16;
+  
+  for (let pass = 0; pass < passes; pass++) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x;
+        
+        // Check if this is a nodata pixel - don't smooth those
+        if (current[idx] < -1000) {
+          next[idx] = current[idx];
+          continue;
+        }
+        
+        let sum = 0;
+        let weightSum = 0;
+        
+        // Sample 3x3 neighborhood
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            const nx = x + kx;
+            const ny = y + ky;
+            
+            // Skip out of bounds
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+            
+            const nidx = ny * width + nx;
+            const val = current[nidx];
+            
+            // Skip nodata neighbors
+            if (val < -1000) continue;
+            
+            const weight = kernel[(ky + 1) * 3 + (kx + 1)];
+            sum += val * weight;
+            weightSum += weight;
+          }
+        }
+        
+        next[idx] = weightSum > 0 ? sum / weightSum : current[idx];
+      }
+    }
+    
+    // Swap buffers
+    [current, next] = [next, current];
+  }
+  
+  return current;
+}
 
 // ============================================
 // Initialization
@@ -50,9 +212,9 @@ let terrain, water, landmarkMeshes = [], gridHelper;
 export function initMap(scene) {
   console.log('🗺️ Building Bay Area map...');
   
-  createTerrain(scene);
+  // Load GeoTIFF and create terrain
+  loadGeoTIFFAndCreateTerrain(scene);
   createWater(scene);
-  createLandmarks(scene);
   createGrid(scene);
   createAtmosphericEffects(scene);
   
@@ -66,11 +228,188 @@ export function initMap(scene) {
 }
 
 // ============================================
-// Terrain
+// GeoTIFF Loading
 // ============================================
 
-function createTerrain(scene) {
-  // Create terrain geometry with some topology
+async function loadGeoTIFFAndCreateTerrain(scene) {
+  try {
+    console.log('  → Loading GeoTIFF...');
+    
+    // Fetch the TIFF file
+    const response = await fetch(TERRAIN_CONFIG.heightmapUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch: ${response.status}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    
+    // Parse with our simple TIFF parser
+    const tiffData = await parseGeoTIFF(arrayBuffer);
+    
+    // Store the data
+    rasterWidth = tiffData.width;
+    rasterHeight = tiffData.height;
+    
+    // Apply smoothing to reduce jaggedness
+    elevationData = smoothElevationData(
+      tiffData.data, 
+      rasterWidth, 
+      rasterHeight, 
+      TERRAIN_CONFIG.smoothingPasses
+    );
+    
+    console.log(`  → GeoTIFF loaded: ${rasterWidth}x${rasterHeight}`);
+    
+    // Find min/max elevation for normalization info
+    for (let i = 0; i < elevationData.length; i++) {
+      const val = elevationData[i];
+      if (Number.isFinite(val) && val > -1000) {
+        if (val < minElevation) minElevation = val;
+        if (val > maxElevation) maxElevation = val;
+      }
+    }
+    
+    console.log(`  → Elevation range: ${minElevation.toFixed(1)}m to ${maxElevation.toFixed(1)}m`);
+    
+    // Create terrain mesh
+    createTerrainFromGeoTIFF(scene);
+    
+    // Now create landmarks (need terrain heights)
+    createLandmarks(scene);
+    
+  } catch (error) {
+    console.error('  → Failed to load GeoTIFF:', error);
+    console.log('  → Falling back to procedural terrain');
+    createProceduralTerrain(scene);
+    createLandmarks(scene);
+  }
+}
+
+// ============================================
+// Terrain from GeoTIFF (direct vertex mapping)
+// ============================================
+
+function createTerrainFromGeoTIFF(scene) {
+  // Create geometry with segments matching raster dimensions exactly
+  // This gives us a 1:1 vertex-to-pixel correspondence
+  const segmentsX = rasterWidth - 1;
+  const segmentsZ = rasterHeight - 1;
+  
+  const geometry = new THREE.PlaneGeometry(
+    MAP_BOUNDS.width,
+    MAP_BOUNDS.depth,
+    segmentsX,
+    segmentsZ
+  );
+  
+  // Rotate to XZ plane (Y = up)
+  geometry.rotateX(-Math.PI / 2);
+  
+  const positions = geometry.attributes.position;
+  
+  // PlaneGeometry vertex order is row-major: (segmentsX+1) x (segmentsZ+1)
+  // which equals rasterWidth x rasterHeight
+  for (let i = 0; i < positions.count; i++) {
+    // Get grid coordinates from vertex index
+    const gridX = i % rasterWidth;
+    const gridZ = Math.floor(i / rasterWidth);
+    
+    // Flip Y so north points to +Z (GeoTIFF row 0 is typically north)
+    const srcZ = (rasterHeight - 1) - gridZ;
+    const srcIndex = srcZ * rasterWidth + gridX;
+    
+    // Get elevation and convert to world height
+    const elevation = elevationData[srcIndex];
+    const height = elevationToWorldY(elevation);
+    
+    positions.setY(i, height);
+  }
+  
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  
+  // Terrain material
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x2d4a3e,
+    roughness: 0.85,
+    metalness: 0.1,
+    flatShading: false,
+    vertexColors: false
+  });
+  
+  terrain = new THREE.Mesh(geometry, material);
+  terrain.receiveShadow = true;
+  terrain.castShadow = true;
+  scene.add(terrain);
+  
+  console.log(`  → Terrain created: ${rasterWidth}x${rasterHeight} vertices`);
+}
+
+// Convert raw elevation (meters) to world Y coordinate
+function elevationToWorldY(val) {
+  // Handle nodata/invalid values
+  if (!Number.isFinite(val) || val < -1000) {
+    return 0; // Treat nodata as sea level
+  }
+  return val * TERRAIN_CONFIG.verticalScale;
+}
+
+// ============================================
+// Sample Elevation (for runtime height queries)
+// Used by particles, landmarks, etc. to get terrain height at any world position
+// Uses bilinear interpolation for smooth results between grid points
+// ============================================
+
+function sampleElevation(worldX, worldZ) {
+  if (!elevationData) return 0;
+  
+  // Convert world coordinates to UV (0-1)
+  const u = (worldX + MAP_BOUNDS.width / 2) / MAP_BOUNDS.width;
+  const v = (worldZ + MAP_BOUNDS.depth / 2) / MAP_BOUNDS.depth;
+  
+  // Clamp to valid range
+  const clampedU = Math.max(0, Math.min(1, u));
+  const clampedV = Math.max(0, Math.min(1, v));
+  
+  // Convert to pixel coordinates
+  const px = clampedU * (rasterWidth - 1);
+  // Flip Y: world +Z is north, but raster row 0 is north
+  const py = (1 - clampedV) * (rasterHeight - 1);
+  
+  // Bilinear interpolation for smooth sampling
+  const x0 = Math.floor(px);
+  const z0 = Math.floor(py);
+  const x1 = Math.min(x0 + 1, rasterWidth - 1);
+  const z1 = Math.min(z0 + 1, rasterHeight - 1);
+  
+  const fx = px - x0;
+  const fz = py - z0;
+  
+  // Get 4 neighboring elevation values
+  const getElev = (x, z) => {
+    const idx = z * rasterWidth + x;
+    const val = elevationData[idx];
+    return (Number.isFinite(val) && val > -1000) ? val : 0;
+  };
+  
+  const e00 = getElev(x0, z0);
+  const e10 = getElev(x1, z0);
+  const e01 = getElev(x0, z1);
+  const e11 = getElev(x1, z1);
+  
+  // Bilinear interpolation
+  const top = e00 * (1 - fx) + e10 * fx;
+  const bottom = e01 * (1 - fx) + e11 * fx;
+  const elevation = top * (1 - fz) + bottom * fz;
+  
+  return elevation * TERRAIN_CONFIG.verticalScale;
+}
+
+// ============================================
+// Procedural Terrain (Fallback)
+// ============================================
+
+function createProceduralTerrain(scene) {
   const geometry = new THREE.PlaneGeometry(
     MAP_BOUNDS.width,
     MAP_BOUNDS.depth,
@@ -78,16 +417,13 @@ function createTerrain(scene) {
     128
   );
   
-  // Rotate to XZ plane
   geometry.rotateX(-Math.PI / 2);
   
-  // Apply height displacement for hills/mountains
   const positions = geometry.attributes.position;
   for (let i = 0; i < positions.count; i++) {
     const x = positions.getX(i);
     const z = positions.getZ(i);
     
-    // Base height from noise-like function
     let height = 0;
     
     // East Bay hills
@@ -96,29 +432,24 @@ function createTerrain(scene) {
       height += hillFactor * 4 * (0.5 + 0.5 * Math.sin(z * 0.1));
     }
     
-    // Marin headlands (northwest)
+    // Marin headlands
     if (x < -10 && z > 10) {
       const marinFactor = Math.max(0, 1 - Math.abs(x + 25) / 20) * Math.max(0, 1 - Math.abs(z - 25) / 20);
       height += marinFactor * 5;
     }
     
-    // Santa Cruz mountains (southwest)
+    // Santa Cruz mountains
     if (x < 5 && z < -20) {
       const scFactor = Math.max(0, 1 - Math.abs(x + 10) / 20) * Math.max(0, 1 - Math.abs(z + 40) / 25);
       height += scFactor * 6;
     }
     
-    // Depression for the bay itself
-    const bayCenter = { x: 0, z: 0 };
-    const distFromBay = Math.sqrt(
-      Math.pow((x - bayCenter.x) / 15, 2) + 
-      Math.pow((z - bayCenter.z) / 25, 2)
-    );
+    // Bay depression
+    const distFromBay = Math.sqrt(Math.pow(x / 15, 2) + Math.pow(z / 25, 2));
     if (distFromBay < 1) {
       height -= (1 - distFromBay) * 3;
     }
     
-    // Add some noise
     height += Math.sin(x * 0.3) * Math.cos(z * 0.3) * 0.5;
     
     positions.setY(i, Math.max(-1, height));
@@ -126,7 +457,6 @@ function createTerrain(scene) {
   
   geometry.computeVertexNormals();
   
-  // Terrain material - earthy with slight stylization
   const material = new THREE.MeshStandardMaterial({
     color: 0x2d4a3e,
     roughness: 0.9,
@@ -136,7 +466,6 @@ function createTerrain(scene) {
   
   terrain = new THREE.Mesh(geometry, material);
   terrain.receiveShadow = true;
-  terrain.position.y = 0;
   scene.add(terrain);
 }
 
@@ -168,7 +497,7 @@ function createWater(scene) {
   });
   
   water = new THREE.Mesh(waterGeometry, waterMaterial);
-  water.position.set(-2, -0.5, 0);
+  water.position.set(-2, 0.1, 0); // Slightly above sea level
   water.receiveShadow = true;
   scene.add(water);
   
@@ -181,7 +510,7 @@ function createWater(scene) {
     opacity: 0.15,
   });
   const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-  glow.position.set(-2, -1, 0);
+  glow.position.set(-2, -0.5, 0);
   scene.add(glow);
 }
 
@@ -192,7 +521,8 @@ function createWater(scene) {
 function createLandmarks(scene) {
   Object.entries(LANDMARKS).forEach(([key, data]) => {
     const group = new THREE.Group();
-    group.position.set(data.x, getTerrainHeight(data.x, data.z), data.z);
+    const terrainH = getTerrainHeight(data.x, data.z);
+    group.position.set(data.x, terrainH, data.z);
     group.userData = { key, ...data };
     
     // Base platform
@@ -288,7 +618,7 @@ function createLandmarks(scene) {
 function createGrid(scene) {
   // Subtle grid for reference
   gridHelper = new THREE.GridHelper(100, 20, 0x222233, 0x111122);
-  gridHelper.position.y = 0.01;
+  gridHelper.position.y = 0.05;
   gridHelper.material.opacity = 0.3;
   gridHelper.material.transparent = true;
   scene.add(gridHelper);
@@ -353,11 +683,15 @@ function createAtmosphericEffects(scene) {
 // ============================================
 
 export function getTerrainHeight(x, z) {
-  // Simplified height lookup - in a real implementation,
-  // this would raycast to the terrain or use the heightmap
+  // Use GeoTIFF elevation if available
+  if (elevationData) {
+    return sampleElevation(x, z);
+  }
+  
+  // Fallback to procedural
+  let height = 0;
   
   // East Bay hills
-  let height = 0;
   if (x > 5 && x < 35) {
     const hillFactor = Math.max(0, 1 - Math.abs(x - 20) / 15);
     height += hillFactor * 4 * (0.5 + 0.5 * Math.sin(z * 0.1));
