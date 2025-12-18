@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bay Area Air Quality Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      overflow: hidden;
+      background: #0a0a0f;
+      font-family: 'Space Grotesk', sans-serif;
+      color: #e0e0e0;
+    }
+
+    #canvas-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    #hud {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 320px;
+    }
+
+    .hud-panel {
+      background: rgba(10, 10, 20, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 
+        0 4px 24px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .hud-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.4);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hud-title::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: #4ecdc4;
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1); }
+    }
+
+    .control-group {
+      margin-bottom: 16px;
+    }
+
+    .control-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .control-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .control-value {
+      color: #4ecdc4;
+      font-weight: 500;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: #4ecdc4;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(78, 205, 196, 0.5);
+      transition: transform 0.15s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .toggle-row:last-child {
+      border-bottom: none;
+    }
+
+    .toggle-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pollutant-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .pollutant-dot.pm25 { color: #ff6b35; background: #ff6b35; }
+    .pollutant-dot.voc { color: #a855f7; background: #a855f7; }
+    .pollutant-dot.ozone { color: #06b6d4; background: #06b6d4; }
+
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .toggle-switch.active {
+      background: rgba(78, 205, 196, 0.3);
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 50%;
+      transition: all 0.2s ease;
+    }
+
+    .toggle-switch.active::after {
+      left: 23px;
+      background: #4ecdc4;
+      box-shadow: 0 0 8px rgba(78, 205, 196, 0.6);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 10px 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.7);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.25);
+      color: #fff;
+    }
+
+    .btn.primary {
+      background: rgba(78, 205, 196, 0.2);
+      border-color: rgba(78, 205, 196, 0.4);
+      color: #4ecdc4;
+    }
+
+    .btn.primary:hover {
+      background: rgba(78, 205, 196, 0.3);
+      border-color: #4ecdc4;
+    }
+
+    .time-presets {
+      display: flex;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .time-preset {
+      flex: 1;
+      padding: 8px 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.03);
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .time-preset:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .time-preset:active {
+      background: rgba(78, 205, 196, 0.2);
+      border-color: rgba(78, 205, 196, 0.4);
+      color: #4ecdc4;
+    }
+
+    #info-panel {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      z-index: 100;
+    }
+
+    .info-stats {
+      display: flex;
+      gap: 24px;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px;
+      font-weight: 600;
+      color: #4ecdc4;
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.4);
+      margin-top: 4px;
+    }
+
+    #title-panel {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      text-align: right;
+      z-index: 100;
+    }
+
+    #title-panel h1 {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.8);
+      margin-bottom: 4px;
+    }
+
+    #title-panel p {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .landmark-labels {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    .landmark-label {
+      position: absolute;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.5);
+      text-transform: uppercase;
+      white-space: nowrap;
+      transform: translate(-50%, -50%);
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  
+  <div id="hud">
+    <div class="hud-panel">
+      <div class="hud-title">Time of Day</div>
+      
+      <div class="control-group">
+        <div class="control-label">
+          Time
+          <span class="control-value" id="time-value">10:00 AM</span>
+        </div>
+        <input type="range" id="time-of-day" min="0" max="24" step="0.25" value="10">
+      </div>
+      
+      <div class="time-presets">
+        <button class="time-preset" data-time="6">Dawn</button>
+        <button class="time-preset" data-time="12">Noon</button>
+        <button class="time-preset" data-time="19">Dusk</button>
+        <button class="time-preset" data-time="0">Night</button>
+      </div>
+      
+      <div class="toggle-row" style="margin-top: 12px;">
+        <span class="toggle-label">Auto Cycle</span>
+        <div class="toggle-switch" id="toggle-auto-time"></div>
+      </div>
+      
+      <div class="control-group" id="auto-speed-group" style="margin-top: 12px; opacity: 0.5;">
+        <div class="control-label">
+          Cycle Speed
+          <span class="control-value" id="auto-speed-value">0.5 hr/s</span>
+        </div>
+        <input type="range" id="auto-time-speed" min="0.1" max="2" step="0.1" value="0.5" disabled>
+      </div>
+    </div>
+    
+    <div class="hud-panel">
+      <div class="hud-title">Atmospheric Transport</div>
+      
+      <div class="control-group">
+        <div class="control-label">
+          Wind Direction
+          <span class="control-value" id="wind-dir-value">225°</span>
+        </div>
+        <input type="range" id="wind-direction" min="0" max="360" value="225">
+      </div>
+      
+      <div class="control-group">
+        <div class="control-label">
+          Wind Speed
+          <span class="control-value" id="wind-speed-value">5.0 m/s</span>
+        </div>
+        <input type="range" id="wind-speed" min="0" max="15" step="0.5" value="5">
+      </div>
+      
+      <div class="control-group">
+        <div class="control-label">
+          Turbulence
+          <span class="control-value" id="turbulence-value">0.3</span>
+        </div>
+        <input type="range" id="turbulence" min="0" max="1" step="0.05" value="0.3">
+      </div>
+    </div>
+    
+    <div class="hud-panel">
+      <div class="hud-title">Emission Sources</div>
+      
+      <div class="control-group">
+        <div class="control-label">
+          Emission Rate
+          <span class="control-value" id="emission-rate-value">1.0x</span>
+        </div>
+        <input type="range" id="emission-rate" min="0" max="3" step="0.1" value="1">
+      </div>
+      
+      <div class="toggle-row">
+        <span class="toggle-label">
+          <span class="pollutant-dot pm25"></span>
+          PM2.5
+        </span>
+        <div class="toggle-switch active" id="toggle-pm25"></div>
+      </div>
+      
+      <div class="toggle-row">
+        <span class="toggle-label">
+          <span class="pollutant-dot voc"></span>
+          VOCs
+        </span>
+        <div class="toggle-switch active" id="toggle-voc"></div>
+      </div>
+      
+      <div class="toggle-row">
+        <span class="toggle-label">
+          <span class="pollutant-dot ozone"></span>
+          O₃
+        </span>
+        <div class="toggle-switch active" id="toggle-ozone"></div>
+      </div>
+    </div>
+    
+    <div class="hud-panel">
+      <div class="hud-title">Simulation</div>
+      <div class="btn-row">
+        <button class="btn primary" id="btn-pause">Pause</button>
+        <button class="btn" id="btn-reset">Reset</button>
+      </div>
+    </div>
+  </div>
+  
+  <div id="info-panel">
+    <div class="hud-panel">
+      <div class="info-stats">
+        <div class="stat">
+          <div class="stat-value" id="particle-count">0</div>
+          <div class="stat-label">Particles</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="sim-time">00:00</div>
+          <div class="stat-label">Sim Time</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="fps">60</div>
+          <div class="stat-label">FPS</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="title-panel">
+    <h1>Bay Area AQI</h1>
+    <p>Atmospheric Transport Model</p>
+  </div>
+  
+  <div class="landmark-labels" id="landmark-labels"></div>
+  
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
