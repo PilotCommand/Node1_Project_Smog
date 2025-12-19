@@ -1,5 +1,5 @@
 /**
- * map.js — Terrain + landmarks + coordinate conventions
+ * map.js â€” Terrain + landmarks + coordinate conventions
  * 
  * Builds the Bay Area world representation using real elevation data from GeoTIFF.
  * Owns: terrain mesh, water plane, landmark meshes, coordinate mapping
@@ -66,7 +66,7 @@ async function parseGeoTIFF(arrayBuffer) {
     }
   }
   
-  console.log(`  → TIFF: ${width}x${height}, ${bitsPerSample}-bit, format=${sampleFormat}`);
+  console.log(`  â†’ TIFF: ${width}x${height}, ${bitsPerSample}-bit, format=${sampleFormat}`);
   
   // Read the raster data
   const pixelCount = width * height;
@@ -95,7 +95,7 @@ async function parseGeoTIFF(arrayBuffer) {
 // Constants & Configuration
 // ============================================
 
-// World scale: 1 unit ≈ 1 km
+// World scale: 1 unit â‰ˆ 1 km
 const WORLD_SCALE = 1;
 
 // Bay Area bounds (accurate to TIFF coverage)
@@ -108,7 +108,7 @@ const MAP_BOUNDS = {
 // Terrain configuration for GeoTIFF
 const TERRAIN_CONFIG = {
   heightmapUrl: '/baymerge.tif',
-  verticalScale: 0.008,  // 8× exaggeration for visible relief
+  verticalScale: 0.008,  // 8Ã— exaggeration for visible relief
   smoothingPasses: 2,    // Number of smoothing iterations (0 = none)
 };
 
@@ -119,7 +119,7 @@ const LANDMARKS = {
   oakland:       { x: 8,   z: 8,   name: 'Oakland', height: 2 },
   berkeley:      { x: 6,   z: 15,  name: 'Berkeley', height: 1.5 },
   richmond:      { x: -2,  z: 25,  name: 'Richmond', height: 1 },
-  sanJose:       { x: 15,  z: -35, name: 'San José', height: 1.5 },
+  sanJose:       { x: 15,  z: -35, name: 'San JosÃ©', height: 1.5 },
   fremont:       { x: 18,  z: -15, name: 'Fremont', height: 1 },
   hayward:       { x: 15,  z: -5,  name: 'Hayward', height: 1 },
   concord:       { x: 25,  z: 20,  name: 'Concord', height: 1 },
@@ -146,7 +146,7 @@ let maxElevation = -Infinity;
 function smoothElevationData(data, width, height, passes = 1) {
   if (passes <= 0) return data;
   
-  console.log(`  → Smoothing elevation data (${passes} passes)...`);
+  console.log(`  â†’ Smoothing elevation data (${passes} passes)...`);
   
   let current = new Float32Array(data);
   let next = new Float32Array(data.length);
@@ -210,7 +210,7 @@ function smoothElevationData(data, width, height, passes = 1) {
 // ============================================
 
 export function initMap(scene) {
-  console.log('🗺️ Building Bay Area map...');
+  console.log('ðŸ—ºï¸ Building Bay Area map...');
   
   // Load GeoTIFF and create terrain
   loadGeoTIFFAndCreateTerrain(scene);
@@ -233,7 +233,7 @@ export function initMap(scene) {
 
 async function loadGeoTIFFAndCreateTerrain(scene) {
   try {
-    console.log('  → Loading GeoTIFF...');
+    console.log('  â†’ Loading GeoTIFF...');
     
     // Fetch the TIFF file
     const response = await fetch(TERRAIN_CONFIG.heightmapUrl);
@@ -258,7 +258,7 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
       TERRAIN_CONFIG.smoothingPasses
     );
     
-    console.log(`  → GeoTIFF loaded: ${rasterWidth}x${rasterHeight}`);
+    console.log(`  â†’ GeoTIFF loaded: ${rasterWidth}x${rasterHeight}`);
     
     // Find min/max elevation for normalization info
     for (let i = 0; i < elevationData.length; i++) {
@@ -269,7 +269,7 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
       }
     }
     
-    console.log(`  → Elevation range: ${minElevation.toFixed(1)}m to ${maxElevation.toFixed(1)}m`);
+    console.log(`  â†’ Elevation range: ${minElevation.toFixed(1)}m to ${maxElevation.toFixed(1)}m`);
     
     // Create terrain mesh
     createTerrainFromGeoTIFF(scene);
@@ -278,8 +278,8 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
     createLandmarks(scene);
     
   } catch (error) {
-    console.error('  → Failed to load GeoTIFF:', error);
-    console.log('  → Falling back to procedural terrain');
+    console.error('  â†’ Failed to load GeoTIFF:', error);
+    console.log('  â†’ Falling back to procedural terrain');
     createProceduralTerrain(scene);
     createLandmarks(scene);
   }
@@ -315,7 +315,7 @@ function createTerrainFromGeoTIFF(scene) {
     const gridZ = Math.floor(i / rasterWidth);
     
     // Flip Y so north points to +Z (GeoTIFF row 0 is typically north)
-    const srcZ = (rasterHeight - 1) - gridZ;
+    const srcZ = gridZ;
     const srcIndex = srcZ * rasterWidth + gridX;
     
     // Get elevation and convert to world height
@@ -342,7 +342,7 @@ function createTerrainFromGeoTIFF(scene) {
   terrain.castShadow = true;
   scene.add(terrain);
   
-  console.log(`  → Terrain created: ${rasterWidth}x${rasterHeight} vertices`);
+  console.log(`  â†’ Terrain created: ${rasterWidth}x${rasterHeight} vertices`);
 }
 
 // Convert raw elevation (meters) to world Y coordinate
@@ -373,8 +373,8 @@ function sampleElevation(worldX, worldZ) {
   
   // Convert to pixel coordinates
   const px = clampedU * (rasterWidth - 1);
-  // Flip Y: world +Z is north, but raster row 0 is north
-  const py = (1 - clampedV) * (rasterHeight - 1);
+  // Direct mapping (no flip)
+  const py = clampedV * (rasterHeight - 1);
   
   // Bilinear interpolation for smooth sampling
   const x0 = Math.floor(px);
