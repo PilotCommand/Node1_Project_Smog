@@ -1,5 +1,5 @@
 /**
- * hud.js - UI overlay (HTML)
+ * hud.js - UI overlay (HTML)
  * 
  * Provides user controls and feedback without touching simulation internals.
  * Owns: HTML overlay, event listeners, sliders/toggles
@@ -47,6 +47,7 @@ export function initHUD(settings, cbs) {
     togglePM25: document.getElementById('toggle-pm25'),
     toggleVOC: document.getElementById('toggle-voc'),
     toggleOzone: document.getElementById('toggle-ozone'),
+    toggleCounties: document.getElementById('toggle-counties'),
     
     // Buttons
     btnPause: document.getElementById('btn-pause'),
@@ -120,6 +121,9 @@ function syncFromSettings(settings) {
   }
   if (elements.toggleOzone) {
     elements.toggleOzone.classList.toggle('active', settings.enableOzone);
+  }
+  if (elements.toggleCounties) {
+    elements.toggleCounties.classList.toggle('active', settings.showCounties !== false);
   }
 }
 
@@ -213,6 +217,13 @@ function attachListeners(settings) {
     elements.toggleOzone.classList.toggle('active');
     const enabled = elements.toggleOzone.classList.contains('active');
     callbacks.onChangeSettings?.({ enableOzone: enabled });
+  });
+  
+  // County Toggle
+  elements.toggleCounties?.addEventListener('click', () => {
+    elements.toggleCounties.classList.toggle('active');
+    const enabled = elements.toggleCounties.classList.contains('active');
+    callbacks.onToggleCounties?.();
   });
   
   // Pause Button

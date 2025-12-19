@@ -1,5 +1,5 @@
 /**
- * main.js ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Bootstrap + render loop
+ * main.js - Bootstrap + render loop
  * 
  * Creates the Three.js core and wires all modules together.
  * Uses fixed timestep from TimeManager for deterministic simulation.
@@ -57,7 +57,10 @@ export const settings = {
   timeScale: 1.0,        // simulation speed multiplier
   
   // Contours
-  showContours: false
+  showContours: false,
+  
+  // Counties
+  showCounties: true
 };
 
 // ============================================
@@ -196,7 +199,7 @@ function onWindowResize() {
 function tryInitContours() {
   const terrain = getTerrainMesh();
   if (terrain && !appState.contoursInitialized) {
-    console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬â€Ã‚ÂºÃƒÂ¯Ã‚Â¸Ã‚Â Terrain ready, initializing contours...');
+    console.log('[Contours] Terrain ready, initializing contours...');
     initContours(terrain, scene);
     appState.contoursInitialized = true;
     
@@ -213,7 +216,7 @@ function tryInitContours() {
 function tryInitHighways() {
   const terrain = getTerrainMesh();
   if (terrain && !appState.highwaysInitialized) {
-    console.log('Ã°Å¸â€ºÂ£Ã¯Â¸Â Terrain ready, initializing highways...');
+    console.log('[Highways] Terrain ready, initializing highways...');
     createHighwayRibbons(scene);
     appState.highwaysInitialized = true;
   }
@@ -233,7 +236,7 @@ function tryInitCounties() {
 // Initialization
 // ============================================
 async function init() {
-  console.log('ÃƒÂ°Ã…Â¸Ã…â€™Ã‚Â Initializing Bay Area Air Quality Simulator...');
+  console.log('[Init] Initializing Bay Area Air Quality Simulator...');
   
   // Initialize Three.js
   initThree();
@@ -293,10 +296,17 @@ async function init() {
       } else {
         console.log('Contours not yet initialized (terrain still loading)');
       }
+    },
+    onToggleCounties: () => {
+      if (appState.countiesInitialized) {
+        settings.showCounties = toggleCountyRegions();
+      } else {
+        console.log('Counties not yet initialized');
+      }
     }
   });
   
-  console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Initialization complete. Starting simulation...');
+  console.log('[OK] Initialization complete. Starting simulation...');
   
   // Start animation loop
   animate();
