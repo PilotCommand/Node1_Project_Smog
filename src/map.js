@@ -666,9 +666,10 @@ function createGrid(scene) {
   const epsilon = 0.0001;
   
   // Convert geo to world coordinates
+  // Note: Z is flipped so that higher latitudes (north) are at negative Z (top of map in typical view)
   const geoToWorldLocal = (lon, lat) => {
     const x = ((lon - GEO_BOUNDS.lonMin) / (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin) - 0.5) * MAP_BOUNDS.width;
-    const z = ((lat - GEO_BOUNDS.latMin) / (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin) - 0.5) * MAP_BOUNDS.depth;
+    const z = (0.5 - (lat - GEO_BOUNDS.latMin) / (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin)) * MAP_BOUNDS.depth;
     return { x, z };
   };
   
@@ -917,7 +918,7 @@ function formatLatitude(lat) {
  */
 export function worldToGeo(worldX, worldZ) {
   const lon = GEO_BOUNDS.lonMin + ((worldX / MAP_BOUNDS.width) + 0.5) * (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin);
-  const lat = GEO_BOUNDS.latMin + ((worldZ / MAP_BOUNDS.depth) + 0.5) * (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin);
+  const lat = GEO_BOUNDS.latMin + (0.5 - (worldZ / MAP_BOUNDS.depth)) * (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin);
   return { lon, lat };
 }
 
@@ -926,7 +927,7 @@ export function worldToGeo(worldX, worldZ) {
  */
 export function geoToWorld(lon, lat) {
   const x = ((lon - GEO_BOUNDS.lonMin) / (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin) - 0.5) * MAP_BOUNDS.width;
-  const z = ((lat - GEO_BOUNDS.latMin) / (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin) - 0.5) * MAP_BOUNDS.depth;
+  const z = (0.5 - (lat - GEO_BOUNDS.latMin) / (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin)) * MAP_BOUNDS.depth;
   return { x, z };
 }
 
