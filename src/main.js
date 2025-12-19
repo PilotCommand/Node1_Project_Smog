@@ -1,5 +1,5 @@
 /**
- * main.js â€” Bootstrap + render loop
+ * main.js — Bootstrap + render loop
  * 
  * Creates the Three.js core and wires all modules together.
  * Owns: scene, camera, renderer, appState, animation loop
@@ -7,13 +7,14 @@
 
 import * as THREE from 'three';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { initMap, disposeMap } from './map.js';
+import { initMap, disposeMap, getTerrainMesh } from './map.js';
 import { initControls, updateControls } from './controls.js';
 import { initHUD, updateHUD } from './hud.js';
 import { initPolluters } from './polluters.js';
 import { initTraffic } from './traffic.js';
 import { initOrchestrator, stepOrchestrator, resetOrchestrator, setPaused, getParticleCount } from './orchestrator.js';
 import { initSky, setTimeOfDay, updateSky, getTimeLabel } from './chronograph.js';
+import { initContours, toggleContours, areContoursVisible } from './contours.js';
 
 // ============================================
 // Global App State
@@ -21,7 +22,8 @@ import { initSky, setTimeOfDay, updateSky, getTimeLabel } from './chronograph.js
 export const appState = {
   paused: false,
   simTime: 0,
-  frameCount: 0
+  frameCount: 0,
+  contoursInitialized: false
 };
 
 export const settings = {
@@ -45,7 +47,10 @@ export const settings = {
   brightness: 1.0,       // Lighting intensity multiplier
   
   // Simulation
-  timeScale: 1.0         // simulation speed multiplier
+  timeScale: 1.0,        // simulation speed multiplier
+  
+  // Contours
+  showContours: false
 };
 
 // ============================================
@@ -109,10 +114,27 @@ function onWindowResize() {
 }
 
 // ============================================
+// Contour Initialization (waits for terrain)
+// ============================================
+function tryInitContours() {
+  const terrain = getTerrainMesh();
+  if (terrain && !appState.contoursInitialized) {
+    console.log('🗺️ Terrain ready, initializing contours...');
+    initContours(terrain, scene);
+    appState.contoursInitialized = true;
+    
+    // Show contours if setting is enabled
+    if (settings.showContours) {
+      toggleContours();
+    }
+  }
+}
+
+// ============================================
 // Initialization
 // ============================================
 async function init() {
-  console.log('ðŸŒ Initializing Bay Area Air Quality Simulator...');
+  console.log('🌁 Initializing Bay Area Air Quality Simulator...');
   
   // Initialize Three.js
   initThree();
@@ -136,6 +158,15 @@ async function init() {
       if ('timeOfDay' in newSettings || 'brightness' in newSettings) {
         setTimeOfDay(settings.timeOfDay, scene, settings.brightness);
       }
+      // Handle contour toggle
+      if ('showContours' in newSettings) {
+        if (appState.contoursInitialized) {
+          const isVisible = areContoursVisible();
+          if (newSettings.showContours !== isVisible) {
+            toggleContours();
+          }
+        }
+      }
     },
     onReset: () => {
       resetOrchestrator();
@@ -144,10 +175,17 @@ async function init() {
     onPauseToggle: () => {
       appState.paused = !appState.paused;
       setPaused(appState.paused);
+    },
+    onToggleContours: () => {
+      if (appState.contoursInitialized) {
+        settings.showContours = toggleContours();
+      } else {
+        console.log('Contours not yet initialized (terrain still loading)');
+      }
     }
   });
   
-  console.log('âœ… Initialization complete. Starting simulation...');
+  console.log('✅ Initialization complete. Starting simulation...');
   
   // Start animation loop
   animate();
@@ -165,6 +203,11 @@ function animate() {
   
   // Update controls
   updateControls(dt);
+  
+  // Try to initialize contours if terrain is ready
+  if (!appState.contoursInitialized) {
+    tryInitContours();
+  }
   
   // Auto time progression
   if (settings.autoTime && !appState.paused) {
@@ -191,7 +234,8 @@ function animate() {
     simTime: appState.simTime,
     paused: appState.paused,
     timeOfDay: settings.timeOfDay,
-    timeLabel: getTimeLabel(settings.timeOfDay)
+    timeLabel: getTimeLabel(settings.timeOfDay),
+    contoursVisible: areContoursVisible()
   });
   
   // Render
@@ -212,3 +256,4 @@ init().catch(err => {
 // Export for debugging
 window.appState = appState;
 window.settings = settings;
+window.toggleContours = toggleContours; // Allow toggling from console

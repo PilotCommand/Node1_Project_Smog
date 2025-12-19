@@ -1,5 +1,5 @@
 /**
- * map.js â€” Terrain + landmarks + coordinate conventions
+ * map.js ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Terrain + landmarks + coordinate conventions
  * 
  * Builds the Bay Area world representation using real elevation data from GeoTIFF.
  * Owns: terrain mesh, water plane, landmark meshes, coordinate mapping
@@ -66,7 +66,7 @@ async function parseGeoTIFF(arrayBuffer) {
     }
   }
   
-  console.log(`  â†’ TIFF: ${width}x${height}, ${bitsPerSample}-bit, format=${sampleFormat}`);
+  console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ TIFF: ${width}x${height}, ${bitsPerSample}-bit, format=${sampleFormat}`);
   
   // Read the raster data
   const pixelCount = width * height;
@@ -95,7 +95,7 @@ async function parseGeoTIFF(arrayBuffer) {
 // Constants & Configuration
 // ============================================
 
-// World scale: 1 unit â‰ˆ 1 km
+// World scale: 1 unit ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  1 km
 const WORLD_SCALE = 1;
 
 // Bay Area bounds (accurate to TIFF coverage)
@@ -105,11 +105,20 @@ const MAP_BOUNDS = {
   maxHeight: 25 // max terrain height in world units
 };
 
+// Geographic coordinate bounds (WGS84)
+const GEO_BOUNDS = {
+  lonMin: -123.135223,  // West
+  lonMax: -121.415863,  // East
+  latMin: 37.182476,    // South
+  latMax: 38.387867     // North
+};
+
 // Terrain configuration for GeoTIFF
 const TERRAIN_CONFIG = {
   heightmapUrl: '/baymerge.tif',
-  verticalScale: 0.008,  // 8Ã— exaggeration for visible relief
+  verticalScale: 0.008,  // 8x exaggeration for visible relief
   smoothingPasses: 2,    // Number of smoothing iterations (0 = none)
+  waterLevel: 0.11,      // Y offset for water plane (adjust to tune coastlines)
 };
 
 // Landmark positions (approximate, centered on SF Bay)
@@ -119,7 +128,7 @@ const LANDMARKS = {
   oakland:       { x: 8,   z: 8,   name: 'Oakland', height: 2 },
   berkeley:      { x: 6,   z: 15,  name: 'Berkeley', height: 1.5 },
   richmond:      { x: -2,  z: 25,  name: 'Richmond', height: 1 },
-  sanJose:       { x: 15,  z: -35, name: 'San JosÃ©', height: 1.5 },
+  sanJose:       { x: 15,  z: -35, name: 'San JosÃƒÆ’Ã‚Â©', height: 1.5 },
   fremont:       { x: 18,  z: -15, name: 'Fremont', height: 1 },
   hayward:       { x: 15,  z: -5,  name: 'Hayward', height: 1 },
   concord:       { x: 25,  z: 20,  name: 'Concord', height: 1 },
@@ -146,7 +155,7 @@ let maxElevation = -Infinity;
 function smoothElevationData(data, width, height, passes = 1) {
   if (passes <= 0) return data;
   
-  console.log(`  â†’ Smoothing elevation data (${passes} passes)...`);
+  console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Smoothing elevation data (${passes} passes)...`);
   
   let current = new Float32Array(data);
   let next = new Float32Array(data.length);
@@ -210,7 +219,7 @@ function smoothElevationData(data, width, height, passes = 1) {
 // ============================================
 
 export function initMap(scene) {
-  console.log('ðŸ—ºï¸ Building Bay Area map...');
+  console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬â€Ã‚ÂºÃƒÂ¯Ã‚Â¸Ã‚Â Building Bay Area map...');
   
   // Load GeoTIFF and create terrain
   loadGeoTIFFAndCreateTerrain(scene);
@@ -233,7 +242,7 @@ export function initMap(scene) {
 
 async function loadGeoTIFFAndCreateTerrain(scene) {
   try {
-    console.log('  â†’ Loading GeoTIFF...');
+    console.log('  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Loading GeoTIFF...');
     
     // Fetch the TIFF file
     const response = await fetch(TERRAIN_CONFIG.heightmapUrl);
@@ -258,7 +267,7 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
       TERRAIN_CONFIG.smoothingPasses
     );
     
-    console.log(`  â†’ GeoTIFF loaded: ${rasterWidth}x${rasterHeight}`);
+    console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ GeoTIFF loaded: ${rasterWidth}x${rasterHeight}`);
     
     // Find min/max elevation for normalization info
     for (let i = 0; i < elevationData.length; i++) {
@@ -269,7 +278,7 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
       }
     }
     
-    console.log(`  â†’ Elevation range: ${minElevation.toFixed(1)}m to ${maxElevation.toFixed(1)}m`);
+    console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Elevation range: ${minElevation.toFixed(1)}m to ${maxElevation.toFixed(1)}m`);
     
     // Create terrain mesh
     createTerrainFromGeoTIFF(scene);
@@ -278,8 +287,8 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
     createLandmarks(scene);
     
   } catch (error) {
-    console.error('  â†’ Failed to load GeoTIFF:', error);
-    console.log('  â†’ Falling back to procedural terrain');
+    console.error('  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Failed to load GeoTIFF:', error);
+    console.log('  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Falling back to procedural terrain');
     createProceduralTerrain(scene);
     createLandmarks(scene);
   }
@@ -342,7 +351,7 @@ function createTerrainFromGeoTIFF(scene) {
   terrain.castShadow = true;
   scene.add(terrain);
   
-  console.log(`  â†’ Terrain created: ${rasterWidth}x${rasterHeight} vertices`);
+  console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Terrain created: ${rasterWidth}x${rasterHeight} vertices`);
 }
 
 // Convert raw elevation (meters) to world Y coordinate
@@ -470,47 +479,57 @@ function createProceduralTerrain(scene) {
 }
 
 // ============================================
-// Water (Bay)
+// Water (Ocean/Bay)
 // ============================================
 
 function createWater(scene) {
-  // Simple water plane for the bay
-  const waterGeometry = new THREE.PlaneGeometry(60, 80, 32, 32);
+  // Create water plane matching terrain dimensions exactly
+  const waterGeometry = new THREE.PlaneGeometry(
+    MAP_BOUNDS.width,
+    MAP_BOUNDS.depth,
+    64,
+    64
+  );
   waterGeometry.rotateX(-Math.PI / 2);
   
-  // Slightly wavy surface
+  // Add subtle wave displacement
   const positions = waterGeometry.attributes.position;
   for (let i = 0; i < positions.count; i++) {
     const x = positions.getX(i);
     const z = positions.getZ(i);
-    const wave = Math.sin(x * 0.2) * Math.cos(z * 0.15) * 0.2;
+    // Gentle waves
+    const wave = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 0.1;
     positions.setY(i, wave);
   }
   waterGeometry.computeVertexNormals();
   
   const waterMaterial = new THREE.MeshStandardMaterial({
-    color: 0x1a3a4a,
-    roughness: 0.2,
-    metalness: 0.6,
+    color: 0x1a4a5a,
+    roughness: 0.1,
+    metalness: 0.8,
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.9,
+    side: THREE.DoubleSide
   });
   
   water = new THREE.Mesh(waterGeometry, waterMaterial);
-  water.position.set(-2, 0.1, 0); // Slightly above sea level
+  water.position.set(0, TERRAIN_CONFIG.waterLevel, 0);
   water.receiveShadow = true;
   scene.add(water);
   
-  // Add subtle glow underneath
-  const glowGeometry = new THREE.PlaneGeometry(65, 85);
+  // Ocean depth glow effect (same size as terrain)
+  const glowGeometry = new THREE.PlaneGeometry(
+    MAP_BOUNDS.width,
+    MAP_BOUNDS.depth
+  );
   glowGeometry.rotateX(-Math.PI / 2);
   const glowMaterial = new THREE.MeshBasicMaterial({
-    color: 0x0066aa,
+    color: 0x0055aa,
     transparent: true,
-    opacity: 0.15,
+    opacity: 0.2,
   });
   const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-  glow.position.set(-2, -0.5, 0);
+  glow.position.set(0, TERRAIN_CONFIG.waterLevel - 1, 0);
   scene.add(glow);
 }
 
@@ -612,16 +631,303 @@ function createLandmarks(scene) {
 }
 
 // ============================================
-// Grid Helper
+// Grid Helper with Geographic Labels (Ribbon-based)
 // ============================================
 
+let gridGroup = null;
+let gridLabels = [];
+
 function createGrid(scene) {
-  // Subtle grid for reference
-  gridHelper = new THREE.GridHelper(100, 20, 0x222233, 0x111122);
-  gridHelper.position.y = 0.05;
-  gridHelper.material.opacity = 0.3;
-  gridHelper.material.transparent = true;
-  scene.add(gridHelper);
+  gridGroup = new THREE.Group();
+  gridGroup.name = 'coordinateGrid';
+  
+  const halfWidth = MAP_BOUNDS.width / 2;
+  const halfDepth = MAP_BOUNDS.depth / 2;
+  const gridY = 5.0; // Elevated grid for better visibility
+  
+  // Ribbon widths
+  const minorRibbonWidth = 0.3;
+  const majorRibbonWidth = 0.6;
+  const borderRibbonWidth = 0.8;
+  
+  // Grid spacing in degrees
+  const lonStep = 0.2;
+  const latStep = 0.2;
+  
+  // Label offset from grid edge
+  const labelOffset = 5;
+  
+  // Colors
+  const minorColor = 0x334455;
+  const majorColor = 0x4a5a6a;
+  const borderColor = 0x5a6a7a;
+  
+  // Small epsilon for floating point comparisons
+  const epsilon = 0.0001;
+  
+  // Convert geo to world coordinates
+  const geoToWorldLocal = (lon, lat) => {
+    const x = ((lon - GEO_BOUNDS.lonMin) / (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin) - 0.5) * MAP_BOUNDS.width;
+    const z = ((lat - GEO_BOUNDS.latMin) / (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin) - 0.5) * MAP_BOUNDS.depth;
+    return { x, z };
+  };
+  
+  // Round to avoid floating point display issues
+  const roundStep = (val, step) => Math.round(val / step) * step;
+  
+  // Collect all ribbon segments
+  const ribbonSegments = [];
+  
+  // Calculate longitude grid lines
+  // For negative numbers: ceil gives us the first line INSIDE the bounds (less negative)
+  // floor gives us the last line INSIDE the bounds (more negative for max)
+  const lonStart = Math.ceil((GEO_BOUNDS.lonMin - epsilon) / lonStep) * lonStep;
+  const lonEnd = Math.floor((GEO_BOUNDS.lonMax + epsilon) / lonStep) * lonStep;
+  
+  console.log(`[Grid] Longitude range: ${lonStart.toFixed(2)} to ${lonEnd.toFixed(2)} (bounds: ${GEO_BOUNDS.lonMin.toFixed(2)} to ${GEO_BOUNDS.lonMax.toFixed(2)})`);
+  
+  // Generate longitude lines using integer iteration to avoid floating point accumulation
+  const lonCount = Math.round((lonEnd - lonStart) / lonStep) + 1;
+  for (let i = 0; i < lonCount; i++) {
+    const lon = roundStep(lonStart + i * lonStep, lonStep);
+    
+    // Skip if outside bounds (safety check)
+    if (lon < GEO_BOUNDS.lonMin - epsilon || lon > GEO_BOUNDS.lonMax + epsilon) continue;
+    
+    const isMajor = Math.abs(roundStep(lon, 0.5) - lon) < epsilon;
+    const { x } = geoToWorldLocal(lon, GEO_BOUNDS.latMin);
+    
+    ribbonSegments.push({
+      p1: new THREE.Vector3(x, gridY, -halfDepth),
+      p2: new THREE.Vector3(x, gridY, halfDepth),
+      width: isMajor ? majorRibbonWidth : minorRibbonWidth,
+      color: isMajor ? majorColor : minorColor
+    });
+    
+    // Format label
+    const lonLabel = formatLongitude(lon);
+    
+    // Add label at south edge
+    const labelSouth = createCoordLabel(lonLabel, x, gridY, -halfDepth - labelOffset, 'lon');
+    if (labelSouth) gridGroup.add(labelSouth);
+    
+    // Add label at north edge
+    const labelNorth = createCoordLabel(lonLabel, x, gridY, halfDepth + labelOffset, 'lon');
+    if (labelNorth) gridGroup.add(labelNorth);
+  }
+  
+  // Calculate latitude grid lines
+  const latStart = Math.ceil((GEO_BOUNDS.latMin - epsilon) / latStep) * latStep;
+  const latEnd = Math.floor((GEO_BOUNDS.latMax + epsilon) / latStep) * latStep;
+  
+  console.log(`[Grid] Latitude range: ${latStart.toFixed(2)} to ${latEnd.toFixed(2)} (bounds: ${GEO_BOUNDS.latMin.toFixed(2)} to ${GEO_BOUNDS.latMax.toFixed(2)})`);
+  
+  // Generate latitude lines using integer iteration
+  const latCount = Math.round((latEnd - latStart) / latStep) + 1;
+  for (let i = 0; i < latCount; i++) {
+    const lat = roundStep(latStart + i * latStep, latStep);
+    
+    // Skip if outside bounds (safety check)
+    if (lat < GEO_BOUNDS.latMin - epsilon || lat > GEO_BOUNDS.latMax + epsilon) continue;
+    
+    const isMajor = Math.abs(roundStep(lat, 0.5) - lat) < epsilon;
+    const { z } = geoToWorldLocal(GEO_BOUNDS.lonMin, lat);
+    
+    ribbonSegments.push({
+      p1: new THREE.Vector3(-halfWidth, gridY, z),
+      p2: new THREE.Vector3(halfWidth, gridY, z),
+      width: isMajor ? majorRibbonWidth : minorRibbonWidth,
+      color: isMajor ? majorColor : minorColor
+    });
+    
+    // Format label
+    const latLabel = formatLatitude(lat);
+    
+    // Add label at west edge
+    const labelWest = createCoordLabel(latLabel, -halfWidth - labelOffset, gridY, z, 'lat');
+    if (labelWest) gridGroup.add(labelWest);
+    
+    // Add label at east edge
+    const labelEast = createCoordLabel(latLabel, halfWidth + labelOffset, gridY, z, 'lat');
+    if (labelEast) gridGroup.add(labelEast);
+  }
+  
+  // Add border rectangle as 4 ribbon segments
+  ribbonSegments.push(
+    { p1: new THREE.Vector3(-halfWidth, gridY, -halfDepth), p2: new THREE.Vector3(halfWidth, gridY, -halfDepth), width: borderRibbonWidth, color: borderColor },
+    { p1: new THREE.Vector3(halfWidth, gridY, -halfDepth), p2: new THREE.Vector3(halfWidth, gridY, halfDepth), width: borderRibbonWidth, color: borderColor },
+    { p1: new THREE.Vector3(halfWidth, gridY, halfDepth), p2: new THREE.Vector3(-halfWidth, gridY, halfDepth), width: borderRibbonWidth, color: borderColor },
+    { p1: new THREE.Vector3(-halfWidth, gridY, halfDepth), p2: new THREE.Vector3(-halfWidth, gridY, -halfDepth), width: borderRibbonWidth, color: borderColor }
+  );
+  
+  // Build ribbon mesh from all segments
+  const ribbonMesh = buildGridRibbonMesh(ribbonSegments);
+  if (ribbonMesh) {
+    gridGroup.add(ribbonMesh);
+  }
+  
+  console.log(`[Grid] Created ${ribbonSegments.length} ribbon segments`);
+  
+  scene.add(gridGroup);
+  gridHelper = gridGroup;
+}
+
+/**
+ * Build a single mesh containing all grid ribbons
+ */
+function buildGridRibbonMesh(segments) {
+  if (segments.length === 0) return null;
+  
+  const positions = [];
+  const colors = [];
+  const indices = [];
+  
+  let vertexIndex = 0;
+  
+  for (const seg of segments) {
+    const { p1, p2, width, color } = seg;
+    const halfWidth = width / 2;
+    
+    // Calculate ribbon direction
+    const dir = new THREE.Vector3().subVectors(p2, p1);
+    const length = dir.length();
+    
+    if (length < 0.001) continue;
+    
+    dir.normalize();
+    
+    // Perpendicular vector in XZ plane (for horizontal ribbon)
+    const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(halfWidth);
+    
+    // Four corners of the ribbon quad
+    const v0 = new THREE.Vector3(p1.x - perp.x, p1.y, p1.z - perp.z);
+    const v1 = new THREE.Vector3(p1.x + perp.x, p1.y, p1.z + perp.z);
+    const v2 = new THREE.Vector3(p2.x - perp.x, p2.y, p2.z - perp.z);
+    const v3 = new THREE.Vector3(p2.x + perp.x, p2.y, p2.z + perp.z);
+    
+    // Add vertices
+    positions.push(
+      v0.x, v0.y, v0.z,
+      v1.x, v1.y, v1.z,
+      v2.x, v2.y, v2.z,
+      v3.x, v3.y, v3.z
+    );
+    
+    // Convert color to RGB
+    const threeColor = new THREE.Color(color);
+    for (let i = 0; i < 4; i++) {
+      colors.push(threeColor.r, threeColor.g, threeColor.b);
+    }
+    
+    // Add indices for 2 triangles
+    indices.push(
+      vertexIndex, vertexIndex + 1, vertexIndex + 2,
+      vertexIndex + 1, vertexIndex + 3, vertexIndex + 2
+    );
+    
+    vertexIndex += 4;
+  }
+  
+  // Create geometry
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  
+  // Create material
+  const material = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.6,
+    depthWrite: false,
+  });
+  
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = 'gridRibbons';
+  mesh.renderOrder = 5;
+  
+  return mesh;
+}
+
+/**
+ * Create a text label sprite for coordinates
+ */
+function createCoordLabel(text, x, y, z, type) {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  canvas.width = 128;
+  canvas.height = 32;
+  
+  // Clear with transparent background
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw text
+  context.font = 'bold 18px monospace';
+  context.fillStyle = '#8899aa';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(text, canvas.width / 2, canvas.height / 2);
+  
+  // Create sprite
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  
+  const spriteMaterial = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0.8,
+    depthTest: false,
+    depthWrite: false
+  });
+  
+  const sprite = new THREE.Sprite(spriteMaterial);
+  sprite.position.set(x, y + 0.5, z);
+  sprite.scale.set(8, 2, 1);
+  
+  gridLabels.push(sprite);
+  return sprite;
+}
+
+/**
+ * Format longitude for display
+ */
+function formatLongitude(lon) {
+  // Round to 1 decimal place to avoid floating point artifacts
+  const rounded = Math.round(lon * 10) / 10;
+  const abs = Math.abs(rounded);
+  const dir = rounded < 0 ? 'W' : 'E';
+  return `${abs.toFixed(1)}°${dir}`;
+}
+
+/**
+ * Format latitude for display
+ */
+function formatLatitude(lat) {
+  // Round to 1 decimal place to avoid floating point artifacts
+  const rounded = Math.round(lat * 10) / 10;
+  const abs = Math.abs(rounded);
+  const dir = rounded < 0 ? 'S' : 'N';
+  return `${abs.toFixed(1)}°${dir}`;
+}
+
+/**
+ * Convert world coordinates to geographic (lat/lon)
+ */
+export function worldToGeo(worldX, worldZ) {
+  const lon = GEO_BOUNDS.lonMin + ((worldX / MAP_BOUNDS.width) + 0.5) * (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin);
+  const lat = GEO_BOUNDS.latMin + ((worldZ / MAP_BOUNDS.depth) + 0.5) * (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin);
+  return { lon, lat };
+}
+
+/**
+ * Convert geographic coordinates to world
+ */
+export function geoToWorld(lon, lat) {
+  const x = ((lon - GEO_BOUNDS.lonMin) / (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin) - 0.5) * MAP_BOUNDS.width;
+  const z = ((lat - GEO_BOUNDS.latMin) / (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin) - 0.5) * MAP_BOUNDS.depth;
+  return { x, z };
 }
 
 // ============================================
@@ -750,4 +1056,26 @@ export function disposeMap() {
       if (child.material) child.material.dispose();
     });
   });
+}
+
+/**
+ * Get the terrain mesh for external use (e.g., contour generation)
+ * @returns {THREE.Mesh|null} The terrain mesh or null if not yet created
+ */
+export function getTerrainMesh() {
+  return terrain;
+}
+
+/**
+ * Get the geographic bounds
+ */
+export function getGeoBounds() {
+  return { ...GEO_BOUNDS };
+}
+
+/**
+ * Get the map bounds
+ */
+export function getMapBounds() {
+  return { ...MAP_BOUNDS };
 }
