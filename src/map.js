@@ -1,11 +1,17 @@
 /**
- * map.js ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Terrain + landmarks + coordinate conventions
+ * map.js ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Terrain + landmarks + coordinate conventions
  * 
  * Builds the Bay Area world representation using real elevation data from GeoTIFF.
  * Owns: terrain mesh, water plane, landmark meshes, coordinate mapping
  */
 
 import * as THREE from 'three';
+import { 
+  LINE_EMITTERS, 
+  POINT_EMITTERS, 
+  getProfile, 
+  geoToWorld as registryGeoToWorld 
+} from './registry.js';
 
 // ============================================
 // Simple TIFF Parser (for uncompressed 32-bit float GeoTIFF)
@@ -66,7 +72,7 @@ async function parseGeoTIFF(arrayBuffer) {
     }
   }
   
-  console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ TIFF: ${width}x${height}, ${bitsPerSample}-bit, format=${sampleFormat}`);
+  console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ TIFF: ${width}x${height}, ${bitsPerSample}-bit, format=${sampleFormat}`);
   
   // Read the raster data
   const pixelCount = width * height;
@@ -95,7 +101,7 @@ async function parseGeoTIFF(arrayBuffer) {
 // Constants & Configuration
 // ============================================
 
-// World scale: 1 unit ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  1 km
+// World scale: 1 unit ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  1 km
 const WORLD_SCALE = 1;
 
 // Bay Area bounds (accurate to TIFF coverage)
@@ -121,24 +127,9 @@ const TERRAIN_CONFIG = {
   waterLevel: 0.11,      // Y offset for water plane (adjust to tune coastlines)
 };
 
-// Landmark positions (approximate, centered on SF Bay)
-// Origin (0,0) is roughly center of the bay
-const LANDMARKS = {
-  sanFrancisco:  { x: -15, z: 5,   name: 'San Francisco', height: 3 },
-  oakland:       { x: 8,   z: 8,   name: 'Oakland', height: 2 },
-  berkeley:      { x: 6,   z: 15,  name: 'Berkeley', height: 1.5 },
-  richmond:      { x: -2,  z: 25,  name: 'Richmond', height: 1 },
-  sanJose:       { x: 15,  z: -35, name: 'San JosÃƒÆ’Ã‚Â©', height: 1.5 },
-  fremont:       { x: 18,  z: -15, name: 'Fremont', height: 1 },
-  hayward:       { x: 15,  z: -5,  name: 'Hayward', height: 1 },
-  concord:       { x: 25,  z: 20,  name: 'Concord', height: 1 },
-  sanMateo:      { x: 0,   z: -15, name: 'San Mateo', height: 1.5 },
-  paloAlto:      { x: 5,   z: -25, name: 'Palo Alto', height: 1 },
-  sfo:           { x: -5,  z: -10, name: 'SFO', height: 0.5, isAirport: true },
-  oakland_port:  { x: 10,  z: 5,   name: 'Port of Oakland', height: 0.5, isPort: true },
-  vallejo:       { x: 5,   z: 35,  name: 'Vallejo', height: 1 },
-  sausalito:     { x: -18, z: 15,  name: 'Sausalito', height: 1 },
-};
+// NOTE: Landmark positions now come from registry.js (POINT_EMITTERS)
+// The old hardcoded LANDMARKS object has been removed.
+// See registry.js for all emitter locations with real geographic coordinates.
 
 // Store references
 let terrain, water, landmarkMeshes = [], gridHelper;
@@ -147,6 +138,7 @@ let rasterWidth = 0;
 let rasterHeight = 0;
 let minElevation = Infinity;
 let maxElevation = -Infinity;
+let highwayGroup = null;  // Highway ribbon meshes
 
 // ============================================
 // Elevation Smoothing (Gaussian-like blur)
@@ -155,7 +147,7 @@ let maxElevation = -Infinity;
 function smoothElevationData(data, width, height, passes = 1) {
   if (passes <= 0) return data;
   
-  console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Smoothing elevation data (${passes} passes)...`);
+  console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Smoothing elevation data (${passes} passes)...`);
   
   let current = new Float32Array(data);
   let next = new Float32Array(data.length);
@@ -219,7 +211,7 @@ function smoothElevationData(data, width, height, passes = 1) {
 // ============================================
 
 export function initMap(scene) {
-  console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬â€Ã‚ÂºÃƒÂ¯Ã‚Â¸Ã‚Â Building Bay Area map...');
+  console.log('ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â Building Bay Area map...');
   
   // Load GeoTIFF and create terrain
   loadGeoTIFFAndCreateTerrain(scene);
@@ -229,7 +221,6 @@ export function initMap(scene) {
   
   return {
     bounds: MAP_BOUNDS,
-    landmarks: LANDMARKS,
     getTerrainHeight,
     getLandmarkPositions,
     worldToScreen
@@ -242,7 +233,7 @@ export function initMap(scene) {
 
 async function loadGeoTIFFAndCreateTerrain(scene) {
   try {
-    console.log('  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Loading GeoTIFF...');
+    console.log('  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Loading GeoTIFF...');
     
     // Fetch the TIFF file
     const response = await fetch(TERRAIN_CONFIG.heightmapUrl);
@@ -267,7 +258,7 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
       TERRAIN_CONFIG.smoothingPasses
     );
     
-    console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ GeoTIFF loaded: ${rasterWidth}x${rasterHeight}`);
+    console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ GeoTIFF loaded: ${rasterWidth}x${rasterHeight}`);
     
     // Find min/max elevation for normalization info
     for (let i = 0; i < elevationData.length; i++) {
@@ -278,7 +269,7 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
       }
     }
     
-    console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Elevation range: ${minElevation.toFixed(1)}m to ${maxElevation.toFixed(1)}m`);
+    console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Elevation range: ${minElevation.toFixed(1)}m to ${maxElevation.toFixed(1)}m`);
     
     // Create terrain mesh
     createTerrainFromGeoTIFF(scene);
@@ -287,8 +278,8 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
     createLandmarks(scene);
     
   } catch (error) {
-    console.error('  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Failed to load GeoTIFF:', error);
-    console.log('  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Falling back to procedural terrain');
+    console.error('  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Failed to load GeoTIFF:', error);
+    console.log('  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Falling back to procedural terrain');
     createProceduralTerrain(scene);
     createLandmarks(scene);
   }
@@ -317,7 +308,7 @@ function createTerrainFromGeoTIFF(scene) {
   const positions = geometry.attributes.position;
   
   // Delta basin elevation adjustment region
-  // 121.8°W to 121.4°W AND 37.6°N to 38.4°N
+  // 121.8Â°W to 121.4Â°W AND 37.6Â°N to 38.4Â°N
   const deltaRegion = {
     lonMin: -121.8,
     lonMax: -121.4,
@@ -390,7 +381,7 @@ function createTerrainFromGeoTIFF(scene) {
   terrain.castShadow = true;
   scene.add(terrain);
   
-  console.log(`  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Terrain created: ${rasterWidth}x${rasterHeight} vertices`);
+  console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Terrain created: ${rasterWidth}x${rasterHeight} vertices`);
 }
 
 // Convert raw elevation (meters) to world Y coordinate
@@ -457,7 +448,7 @@ function sampleElevation(worldX, worldZ) {
   const lon = GEO_BOUNDS.lonMin + clampedU * (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin);
   const lat = GEO_BOUNDS.latMax - clampedV * (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin);
   
-  // Delta region: 121.8°W to 121.4°W AND 37.6°N to 38.4°N with smooth blending
+  // Delta region: 121.8Â°W to 121.4Â°W AND 37.6Â°N to 38.4Â°N with smooth blending
   const deltaLonMin = -121.8, deltaLonMax = -121.4;
   const deltaLatMin = 37.6, deltaLatMax = 38.4;
   const blendDist = 0.1;
@@ -601,101 +592,616 @@ function createWater(scene) {
 }
 
 // ============================================
-// Landmarks (Cities)
+// Landmarks (Visual markers for emitters from registry)
 // ============================================
 
+// Store label sprites for landmarks
+let landmarkLabels = [];
+
+/**
+ * Create visual markers and labels for all point emitters from registry
+ */
 function createLandmarks(scene) {
-  Object.entries(LANDMARKS).forEach(([key, data]) => {
-    const group = new THREE.Group();
-    const terrainH = getTerrainHeight(data.x, data.z);
-    group.position.set(data.x, terrainH, data.z);
-    group.userData = { key, ...data };
-    
-    // Base platform
-    const baseGeometry = new THREE.CylinderGeometry(1.5, 2, 0.3, 6);
-    const baseMaterial = new THREE.MeshStandardMaterial({
-      color: 0x1a1a2e,
-      roughness: 0.8,
-      metalness: 0.2
+  console.log('🏙️ Creating landmarks from registry...');
+  
+  // Clear existing
+  landmarkMeshes.forEach(mesh => {
+    scene.remove(mesh);
+    mesh.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
     });
-    const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    base.position.y = 0.15;
-    base.receiveShadow = true;
-    group.add(base);
+  });
+  landmarkMeshes = [];
+  landmarkLabels = [];
+  
+  let counts = { urban: 0, airport: 0, refinery: 0, port: 0, bridge: 0, other: 0 };
+  
+  POINT_EMITTERS.forEach(emitter => {
+    const profile = getProfile(emitter.profile);
+    if (!profile) return;
     
-    // City indicator - stylized building cluster or icon
-    if (data.isAirport) {
-      // Airport icon
-      const runwayGeo = new THREE.BoxGeometry(3, 0.1, 0.5);
-      const runwayMat = new THREE.MeshStandardMaterial({ 
-        color: 0x4a4a5a,
-        emissive: 0x222233,
-        emissiveIntensity: 0.3
-      });
-      const runway = new THREE.Mesh(runwayGeo, runwayMat);
-      runway.position.y = 0.35;
-      group.add(runway);
-    } else if (data.isPort) {
-      // Port icon - crane-like
-      const craneGeo = new THREE.BoxGeometry(0.3, 2, 0.3);
-      const craneMat = new THREE.MeshStandardMaterial({ 
-        color: 0xff6b35,
-        emissive: 0xff6b35,
-        emissiveIntensity: 0.3
-      });
-      const crane = new THREE.Mesh(craneGeo, craneMat);
-      crane.position.y = 1.3;
-      group.add(crane);
-      
-      const armGeo = new THREE.BoxGeometry(1.5, 0.2, 0.2);
-      const arm = new THREE.Mesh(armGeo, craneMat);
-      arm.position.set(0.5, 2.2, 0);
-      group.add(arm);
+    // Convert geo coords to world coords
+    const worldCoords = registryGeoToWorld(emitter.coords.lon, emitter.coords.lat);
+    const terrainH = getTerrainHeight(worldCoords.x, worldCoords.z);
+    
+    // Create group for this landmark
+    const group = new THREE.Group();
+    group.position.set(worldCoords.x, terrainH, worldCoords.z);
+    group.userData = { 
+      id: emitter.id, 
+      name: emitter.name,
+      type: profile.type,
+      profile: emitter.profile
+    };
+    
+    // Create visual based on emitter type
+    const type = profile.type;
+    
+    if (type === 'urban') {
+      createCityVisual(group, emitter, profile);
+      counts.urban++;
+    } else if (type === 'airport' || type === 'military') {
+      createAirportVisual(group, emitter, profile);
+      counts.airport++;
+    } else if (type === 'refinery') {
+      createRefineryVisual(group, emitter, profile);
+      counts.refinery++;
+    } else if (type === 'port') {
+      createPortVisual(group, emitter, profile);
+      counts.port++;
+    } else if (type === 'bridge') {
+      createBridgeVisual(group, emitter, profile);
+      counts.bridge++;
+    } else if (type === 'interchange') {
+      createInterchangeVisual(group, emitter, profile);
+      counts.other++;
+    } else if (type === 'memorial') {
+      // Memorial - subtle marker, no emissions
+      createMemorialVisual(group, emitter, profile);
+      counts.other++;
     } else {
-      // City buildings - cluster of boxes
-      const buildingCount = Math.ceil(data.height * 2);
-      const buildingMat = new THREE.MeshStandardMaterial({
-        color: 0x3a4a5a,
-        roughness: 0.6,
-        metalness: 0.4,
-        emissive: 0x111122,
-        emissiveIntensity: 0.2
-      });
-      
-      for (let i = 0; i < buildingCount; i++) {
-        const bHeight = data.height * (0.5 + Math.random() * 0.8);
-        const bWidth = 0.3 + Math.random() * 0.4;
-        const buildingGeo = new THREE.BoxGeometry(bWidth, bHeight, bWidth);
-        const building = new THREE.Mesh(buildingGeo, buildingMat);
-        building.position.set(
-          (Math.random() - 0.5) * 1.5,
-          bHeight / 2 + 0.3,
-          (Math.random() - 0.5) * 1.5
-        );
-        building.castShadow = true;
-        building.receiveShadow = true;
-        group.add(building);
-      }
-      
-      // Add glowing windows effect for major cities
-      if (data.height >= 2) {
-        const glowGeo = new THREE.SphereGeometry(0.8, 8, 8);
-        const glowMat = new THREE.MeshBasicMaterial({
-          color: 0xffaa44,
-          transparent: true,
-          opacity: 0.15
-        });
-        const cityGlow = new THREE.Mesh(glowGeo, glowMat);
-        cityGlow.position.y = data.height * 0.5;
-        cityGlow.scale.y = 0.5;
-        group.add(cityGlow);
-      }
+      // Default fallback
+      createDefaultVisual(group, emitter, profile);
+      counts.other++;
+    }
+    
+    // Add label above the landmark (hidden by default)
+    const label = createLandmarkLabel(emitter.name, profile.type);
+    if (label) {
+      // Position label above the visual
+      const labelHeight = getLabelHeight(profile);
+      label.position.set(0, labelHeight, 0);
+      label.visible = false; // Hidden by default, shown on hover
+      group.add(label);
+      group.userData.label = label; // Store reference for hover system
+      landmarkLabels.push(label);
     }
     
     scene.add(group);
     landmarkMeshes.push(group);
   });
+  
+  console.log(`  → Created ${landmarkMeshes.length} landmarks:`, counts);
 }
+
+/**
+ * Get appropriate label height based on profile type
+ */
+function getLabelHeight(profile) {
+  const type = profile.type;
+  if (type === 'refinery') return (profile.height || 5) + (profile.plumeRise || 0) + 3;
+  if (type === 'urban') return (profile.height || 0.5) + 4;
+  if (type === 'port') return 5;
+  if (type === 'bridge') return 4;
+  return 3;
+}
+
+/**
+ * Create a text label sprite matching HUD panel style
+ * Canvas and sprite scale dynamically based on text length
+ */
+function createLandmarkLabel(text, type) {
+  // Font settings - matching HUD style (Space Grotesk, not bold)
+  const fontSize = 44;
+  const fontFamily = '"Space Grotesk", Arial, sans-serif';
+  const font = `${fontSize}px ${fontFamily}`;
+  
+  // Create temporary canvas to measure text
+  const measureCanvas = document.createElement('canvas');
+  const measureCtx = measureCanvas.getContext('2d');
+  measureCtx.font = font;
+  const textMetrics = measureCtx.measureText(text);
+  const textWidth = textMetrics.width;
+  
+  // Generous padding to match HUD panel feel
+  const paddingX = 48;
+  const paddingY = 28;
+  const canvasWidth = Math.max(160, textWidth + paddingX * 2 + 20);
+  const canvasHeight = fontSize + paddingY * 2 + 20;
+  
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  
+  // Clear
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Background panel dimensions
+  const panelWidth = textWidth + paddingX * 2;
+  const panelHeight = fontSize + paddingY * 2;
+  const panelX = (canvas.width - panelWidth) / 2;
+  const panelY = (canvas.height - panelHeight) / 2;
+  const borderRadius = 12;
+  
+  // Drop shadow matching HUD: box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4)
+  context.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  context.shadowBlur = 24;
+  context.shadowOffsetX = 0;
+  context.shadowOffsetY = 4;
+  
+  // Background matching HUD: rgba(10, 10, 20, 0.85)
+  context.fillStyle = 'rgba(10, 10, 20, 0.85)';
+  context.beginPath();
+  context.roundRect(panelX, panelY, panelWidth, panelHeight, borderRadius);
+  context.fill();
+  
+  // Reset shadow for border
+  context.shadowColor = 'transparent';
+  context.shadowBlur = 0;
+  context.shadowOffsetY = 0;
+  
+  // Colored border based on type
+  const borderColors = {
+    urban: '#4a90d9',
+    airport: '#e74c3c',
+    military: '#2c3e50',
+    refinery: '#e67e22',
+    port: '#3498db',
+    bridge: '#d4a574',
+    interchange: '#c49464',
+    memorial: '#7f8c8d'
+  };
+  const borderColor = borderColors[type] || '#4ecdc4';
+  context.strokeStyle = borderColor;
+  context.lineWidth = 2;
+  context.stroke();
+  
+  // Text - not bold, matching HUD text color
+  context.fillStyle = 'rgba(255, 255, 255, 0.87)';
+  context.font = font;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(text, canvas.width / 2, canvas.height / 2);
+  
+  // Create sprite
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false
+  });
+  
+  const sprite = new THREE.Sprite(material);
+  
+  // Scale sprite proportionally to canvas size
+  const scaleX = (canvasWidth / 256) * 10;
+  const scaleY = (canvasHeight / 256) * 10;
+  sprite.scale.set(scaleX, scaleY, 1);
+  
+  sprite.renderOrder = 100;
+  sprite.userData.type = 'label';
+  
+  return sprite;
+}
+
+// ============================================
+// Visual Creators by Type
+// ============================================
+
+/**
+ * Create a hexagonal base platform for any landmark
+ * Gives consistent "board game piece" aesthetic
+ * 
+ * @param {THREE.Group} group - Parent group to add base to
+ * @param {number} size - Radius of the hexagon
+ * @param {number} color - Accent color for the rim
+ * @returns {number} The Y position of the top surface
+ */
+function createHexBase(group, size = 1.5, color = 0x4ecdc4) {
+  // Main platform (hexagonal prism)
+  const baseGeo = new THREE.CylinderGeometry(size, size * 1.1, 0.25, 6);
+  const baseMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a2e,
+    roughness: 0.7,
+    metalness: 0.3
+  });
+  const base = new THREE.Mesh(baseGeo, baseMat);
+  base.position.y = 0.125;
+  base.receiveShadow = true;
+  base.castShadow = true;
+  group.add(base);
+  
+  // Accent rim (slightly larger, thinner hexagon underneath)
+  const rimGeo = new THREE.CylinderGeometry(size * 1.15, size * 1.2, 0.08, 6);
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: color,
+    roughness: 0.4,
+    metalness: 0.5,
+    emissive: color,
+    emissiveIntensity: 0.3
+  });
+  const rim = new THREE.Mesh(rimGeo, rimMat);
+  rim.position.y = 0.04;
+  rim.receiveShadow = true;
+  group.add(rim);
+  
+  // Top surface indicator (subtle inner hexagon)
+  const topGeo = new THREE.CylinderGeometry(size * 0.85, size * 0.85, 0.02, 6);
+  const topMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2a3e,
+    roughness: 0.6,
+    metalness: 0.2
+  });
+  const top = new THREE.Mesh(topGeo, topMat);
+  top.position.y = 0.26;
+  group.add(top);
+  
+  return 0.27; // Return top surface Y position
+}
+
+function createCityVisual(group, emitter, profile) {
+  // Determine city size from profile and scale
+  const baseHeight = profile.type === 'urban' ? 
+    (profile.spread > 4 ? 3 : profile.spread > 2 ? 2 : 1) : 1;
+  const height = baseHeight * (emitter.scale || 1);
+  
+  // Hex base platform
+  const baseSize = Math.max(1.5, profile.spread * 0.4);
+  const topY = createHexBase(group, baseSize, profile.color || 0x4a90d9);
+  
+  // Buildings cluster
+  const buildingCount = Math.ceil(height * 2) + 2;
+  const buildingMat = new THREE.MeshStandardMaterial({
+    color: profile.color || 0x3a4a5a,
+    roughness: 0.6,
+    metalness: 0.4,
+    emissive: 0x111122,
+    emissiveIntensity: 0.2
+  });
+  
+  for (let i = 0; i < buildingCount; i++) {
+    const bHeight = height * (0.4 + Math.random() * 0.8);
+    const bWidth = 0.25 + Math.random() * 0.35;
+    const buildingGeo = new THREE.BoxGeometry(bWidth, bHeight, bWidth);
+    const building = new THREE.Mesh(buildingGeo, buildingMat);
+    const spread = baseSize * 0.6;
+    building.position.set(
+      (Math.random() - 0.5) * spread,
+      topY + bHeight / 2,
+      (Math.random() - 0.5) * spread
+    );
+    building.castShadow = true;
+    building.receiveShadow = true;
+    group.add(building);
+  }
+  
+  // Glow for larger cities
+  if (height >= 2) {
+    const glowGeo = new THREE.SphereGeometry(baseSize * 0.5, 8, 8);
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0xffaa44,
+      transparent: true,
+      opacity: 0.12
+    });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.position.y = height * 0.4;
+    glow.scale.y = 0.5;
+    group.add(glow);
+  }
+}
+
+function createAirportVisual(group, emitter, profile) {
+  // Hex base platform
+  const baseSize = 2.5;
+  const topY = createHexBase(group, baseSize, profile.color || 0xe74c3c);
+  
+  // Runway
+  const runwayLength = 3.5;
+  const runwayGeo = new THREE.BoxGeometry(runwayLength, 0.08, 0.5);
+  const runwayMat = new THREE.MeshStandardMaterial({
+    color: 0x3a3a4a,
+    roughness: 0.9,
+    emissive: 0x111111,
+    emissiveIntensity: 0.2
+  });
+  const runway = new THREE.Mesh(runwayGeo, runwayMat);
+  runway.position.y = topY + 0.04;
+  group.add(runway);
+  
+  // Runway markings
+  const markingGeo = new THREE.BoxGeometry(0.25, 0.09, 0.12);
+  const markingMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  for (let i = -1.2; i <= 1.2; i += 0.6) {
+    const marking = new THREE.Mesh(markingGeo, markingMat);
+    marking.position.set(i, topY + 0.05, 0);
+    group.add(marking);
+  }
+  
+  // Terminal building
+  const terminalGeo = new THREE.BoxGeometry(1.0, 0.5, 0.6);
+  const terminalMat = new THREE.MeshStandardMaterial({
+    color: profile.color || 0xe74c3c,
+    roughness: 0.5,
+    emissive: profile.color || 0xe74c3c,
+    emissiveIntensity: 0.3
+  });
+  const terminal = new THREE.Mesh(terminalGeo, terminalMat);
+  terminal.position.set(0, topY + 0.25, 1.0);
+  terminal.castShadow = true;
+  group.add(terminal);
+  
+  // Control tower
+  const towerGeo = new THREE.CylinderGeometry(0.12, 0.15, 1.0, 8);
+  const tower = new THREE.Mesh(towerGeo, terminalMat);
+  tower.position.set(0.6, topY + 0.5, 1.0);
+  tower.castShadow = true;
+  group.add(tower);
+}
+
+function createRefineryVisual(group, emitter, profile) {
+  const height = profile.height || 5;
+  const plumeRise = profile.plumeRise || 0;
+  
+  // Hex base platform
+  const baseSize = 2.0;
+  const topY = createHexBase(group, baseSize, profile.color || 0xe67e22);
+  
+  // Main stack
+  const stackGeo = new THREE.CylinderGeometry(0.2, 0.3, height, 12);
+  const stackMat = new THREE.MeshStandardMaterial({
+    color: profile.color || 0xe67e22,
+    roughness: 0.4,
+    metalness: 0.6,
+    emissive: profile.color || 0xe67e22,
+    emissiveIntensity: 0.4
+  });
+  const stack = new THREE.Mesh(stackGeo, stackMat);
+  stack.position.set(0, topY + height / 2, 0);
+  stack.castShadow = true;
+  group.add(stack);
+  
+  // Secondary stacks
+  const stack2Geo = new THREE.CylinderGeometry(0.15, 0.22, height * 0.7, 8);
+  const stack2 = new THREE.Mesh(stack2Geo, stackMat);
+  stack2.position.set(-0.7, topY + height * 0.35, 0.3);
+  stack2.castShadow = true;
+  group.add(stack2);
+  
+  const stack3 = new THREE.Mesh(stack2Geo, stackMat);
+  stack3.position.set(0.6, topY + height * 0.35, -0.2);
+  stack3.castShadow = true;
+  group.add(stack3);
+  
+  // Storage tanks
+  const tankGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.4, 16);
+  const tankMat = new THREE.MeshStandardMaterial({
+    color: 0x4a4a5a,
+    roughness: 0.5,
+    metalness: 0.4
+  });
+  const tank1 = new THREE.Mesh(tankGeo, tankMat);
+  tank1.position.set(-0.9, topY + 0.2, -0.5);
+  group.add(tank1);
+  
+  const tank2 = new THREE.Mesh(tankGeo, tankMat);
+  tank2.position.set(0.9, topY + 0.2, 0.5);
+  group.add(tank2);
+  
+  // Emission plume glow at top
+  const plumeGeo = new THREE.SphereGeometry(0.4, 8, 8);
+  const plumeMat = new THREE.MeshBasicMaterial({
+    color: 0xffaa44,
+    transparent: true,
+    opacity: 0.25
+  });
+  const plume = new THREE.Mesh(plumeGeo, plumeMat);
+  plume.position.set(0, topY + height + plumeRise * 0.3, 0);
+  plume.scale.set(1, 1.5, 1);
+  group.add(plume);
+}
+
+function createPortVisual(group, emitter, profile) {
+  // Hex base platform
+  const baseSize = 2.2;
+  const topY = createHexBase(group, baseSize, profile.color || 0x3498db);
+  
+  // Container cranes
+  const craneMat = new THREE.MeshStandardMaterial({
+    color: profile.color || 0xff6b35,
+    roughness: 0.4,
+    metalness: 0.5,
+    emissive: profile.color || 0xff6b35,
+    emissiveIntensity: 0.3
+  });
+  
+  for (let i = -1; i <= 1; i += 2) {
+    // Vertical post
+    const postGeo = new THREE.BoxGeometry(0.15, 2.5, 0.15);
+    const post = new THREE.Mesh(postGeo, craneMat);
+    post.position.set(i * 1.0, topY + 1.25, 0);
+    post.castShadow = true;
+    group.add(post);
+    
+    // Horizontal arm
+    const armGeo = new THREE.BoxGeometry(0.12, 0.12, 1.8);
+    const arm = new THREE.Mesh(armGeo, craneMat);
+    arm.position.set(i * 1.0, topY + 2.4, -0.4);
+    group.add(arm);
+  }
+  
+  // Containers (stacked boxes)
+  const containerColors = [0x2980b9, 0xe74c3c, 0x27ae60, 0xf39c12];
+  const containerGeo = new THREE.BoxGeometry(0.5, 0.3, 0.22);
+  
+  let colorIndex = 0;
+  for (let x = -0.5; x <= 0.5; x += 0.55) {
+    for (let y = 0; y < 2; y++) {
+      const containerMat = new THREE.MeshStandardMaterial({
+        color: containerColors[colorIndex % containerColors.length],
+        roughness: 0.6
+      });
+      const container = new THREE.Mesh(containerGeo, containerMat);
+      container.position.set(x, topY + 0.15 + y * 0.35, 0.6);
+      group.add(container);
+      colorIndex++;
+    }
+  }
+}
+
+function createBridgeVisual(group, emitter, profile) {
+  // Hex base platform
+  const baseSize = 2.0;
+  const topY = createHexBase(group, baseSize, profile.color || 0xd4a574);
+  
+  // Bridge deck
+  const deckGeo = new THREE.BoxGeometry(3, 0.12, 0.6);
+  const deckMat = new THREE.MeshStandardMaterial({
+    color: profile.color || 0xd4a574,
+    roughness: 0.6,
+    metalness: 0.3,
+    emissive: profile.color || 0xd4a574,
+    emissiveIntensity: 0.2
+  });
+  const deck = new THREE.Mesh(deckGeo, deckMat);
+  deck.position.y = topY + 0.8;
+  group.add(deck);
+  
+  // Towers
+  const towerGeo = new THREE.BoxGeometry(0.12, 1.8, 0.12);
+  const tower1 = new THREE.Mesh(towerGeo, deckMat);
+  tower1.position.set(-0.9, topY + 0.9, 0);
+  tower1.castShadow = true;
+  group.add(tower1);
+  
+  const tower2 = new THREE.Mesh(towerGeo, deckMat);
+  tower2.position.set(0.9, topY + 0.9, 0);
+  tower2.castShadow = true;
+  group.add(tower2);
+  
+  // Cables (simplified as thin boxes)
+  const cableGeo = new THREE.BoxGeometry(2.0, 0.025, 0.025);
+  const cable1 = new THREE.Mesh(cableGeo, deckMat);
+  cable1.position.set(0, topY + 1.6, 0.15);
+  cable1.rotation.z = 0.08;
+  group.add(cable1);
+  
+  const cable2 = new THREE.Mesh(cableGeo, deckMat);
+  cable2.position.set(0, topY + 1.6, -0.15);
+  cable2.rotation.z = -0.08;
+  group.add(cable2);
+}
+
+function createInterchangeVisual(group, emitter, profile) {
+  // Hex base platform
+  const baseSize = 2.0;
+  const topY = createHexBase(group, baseSize, profile.color || 0xc49464);
+  
+  // Cloverleaf-style visual - central elevated section
+  const centerGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.15, 16);
+  const roadMat = new THREE.MeshStandardMaterial({
+    color: 0x4a4a5a,
+    roughness: 0.9
+  });
+  const center = new THREE.Mesh(centerGeo, roadMat);
+  center.position.y = topY + 0.4;
+  group.add(center);
+  
+  // Road segments extending out (curved ramps)
+  const roadGeo = new THREE.BoxGeometry(1.8, 0.08, 0.4);
+  for (let angle = 0; angle < 4; angle++) {
+    const road = new THREE.Mesh(roadGeo, roadMat);
+    const dist = 0.9;
+    road.position.set(
+      Math.cos(angle * Math.PI / 2) * dist,
+      topY + 0.2 + Math.sin(angle * Math.PI / 2 + 1) * 0.1,
+      Math.sin(angle * Math.PI / 2) * dist
+    );
+    road.rotation.y = angle * Math.PI / 2;
+    group.add(road);
+  }
+  
+  // Support pillars
+  const pillarGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.4, 8);
+  const pillarMat = new THREE.MeshStandardMaterial({
+    color: 0x3a3a4a,
+    roughness: 0.7
+  });
+  for (let angle = 0; angle < 4; angle++) {
+    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+    pillar.position.set(
+      Math.cos(angle * Math.PI / 2 + Math.PI / 4) * 1.2,
+      topY + 0.2,
+      Math.sin(angle * Math.PI / 2 + Math.PI / 4) * 1.2
+    );
+    group.add(pillar);
+  }
+}
+
+function createMemorialVisual(group, emitter, profile) {
+  // Hex base platform (smaller, more solemn)
+  const baseSize = 1.2;
+  const topY = createHexBase(group, baseSize, 0x7f8c8d);
+  
+  // Monument obelisk
+  const monumentGeo = new THREE.CylinderGeometry(0.08, 0.2, 1.2, 4);
+  const monumentMat = new THREE.MeshStandardMaterial({
+    color: 0x95a5a6,
+    roughness: 0.4,
+    metalness: 0.3
+  });
+  const monument = new THREE.Mesh(monumentGeo, monumentMat);
+  monument.position.y = topY + 0.6;
+  monument.rotation.y = Math.PI / 4; // Rotate to diamond orientation
+  monument.castShadow = true;
+  group.add(monument);
+  
+  // Subtle eternal flame glow
+  const flameGeo = new THREE.SphereGeometry(0.1, 8, 8);
+  const flameMat = new THREE.MeshBasicMaterial({
+    color: 0xffaa44,
+    transparent: true,
+    opacity: 0.4
+  });
+  const flame = new THREE.Mesh(flameGeo, flameMat);
+  flame.position.y = topY + 1.3;
+  group.add(flame);
+}
+
+function createDefaultVisual(group, emitter, profile) {
+  // Hex base platform
+  const baseSize = 1.3;
+  const topY = createHexBase(group, baseSize, profile.color || 0x4ecdc4);
+  
+  // Generic marker sphere
+  const markerGeo = new THREE.SphereGeometry(0.4, 16, 16);
+  const markerMat = new THREE.MeshStandardMaterial({
+    color: profile.color || 0x4ecdc4,
+    roughness: 0.4,
+    metalness: 0.3,
+    emissive: profile.color || 0x4ecdc4,
+    emissiveIntensity: 0.3
+  });
+  const marker = new THREE.Mesh(markerGeo, markerMat);
+  marker.position.y = topY + 0.5;
+  marker.castShadow = true;
+  group.add(marker);
+}
+
 
 // ============================================
 // Grid Helper with Geographic Labels (Ribbon-based)
@@ -857,7 +1363,7 @@ function createCompassRose(parentGroup, halfWidth, halfDepth, gridY) {
     return { x, z };
   };
   
-  // Position at 37.5°N, 122.8°W
+  // Position at 37.5Â°N, 122.8Â°W
   const compassPos = geoToWorldLocal(-122.8, 37.5);
   const compassX = compassPos.x;
   const compassZ = compassPos.z;
@@ -911,8 +1417,8 @@ function createCompassRose(parentGroup, halfWidth, halfDepth, gridY) {
   
   // Create cardinal direction arrows (N, S, E, W)
   // After rotateX(-PI/2), the arrow tip points toward -Z, so:
-  // rotation = 0 → -Z (North), rotation = PI → +Z (South)
-  // rotation = -PI/2 → +X (East), rotation = PI/2 → -X (West)
+  // rotation = 0 â†’ -Z (North), rotation = PI â†’ +Z (South)
+  // rotation = -PI/2 â†’ +X (East), rotation = PI/2 â†’ -X (West)
   
   // North (negative Z in world space = higher latitude)
   const northArrow = createArrow(cardinalLength, arrowWidth, northColor, 0);
@@ -1042,7 +1548,7 @@ function createCompassRose(parentGroup, halfWidth, halfDepth, gridY) {
   
   parentGroup.add(compassGroup);
   
-  console.log(`[Grid] Compass rose created at 37.5°N, 122.8°W (world: ${compassX.toFixed(1)}, ${compassY.toFixed(1)}, ${compassZ.toFixed(1)})`);
+  console.log(`[Grid] Compass rose created at 37.5Â°N, 122.8Â°W (world: ${compassX.toFixed(1)}, ${compassY.toFixed(1)}, ${compassZ.toFixed(1)})`);
 }
 
 /**
@@ -1171,7 +1677,7 @@ function formatLongitude(lon) {
   const rounded = Math.round(lon * 10) / 10;
   const abs = Math.abs(rounded);
   const dir = rounded < 0 ? 'W' : 'E';
-  return `${abs.toFixed(1)}°${dir}`;
+  return `${abs.toFixed(1)}Â°${dir}`;
 }
 
 /**
@@ -1182,7 +1688,7 @@ function formatLatitude(lat) {
   const rounded = Math.round(lat * 10) / 10;
   const abs = Math.abs(rounded);
   const dir = rounded < 0 ? 'S' : 'N';
-  return `${abs.toFixed(1)}°${dir}`;
+  return `${abs.toFixed(1)}Â°${dir}`;
 }
 
 /**
@@ -1264,8 +1770,24 @@ export function getTerrainHeight(x, z) {
   return Math.max(0, height);
 }
 
+/**
+ * Get landmark positions from registry (for backwards compatibility)
+ * Returns object keyed by emitter ID with world coordinates
+ */
 export function getLandmarkPositions() {
-  return { ...LANDMARKS };
+  const positions = {};
+  POINT_EMITTERS.forEach(emitter => {
+    const world = registryGeoToWorld(emitter.coords.lon, emitter.coords.lat);
+    const profile = getProfile(emitter.profile);
+    positions[emitter.id] = {
+      x: world.x,
+      z: world.z,
+      name: emitter.name,
+      height: profile ? (profile.height || 0.5) : 0.5,
+      type: profile ? profile.type : 'unknown'
+    };
+  });
+  return positions;
 }
 
 export function worldToScreen(position, camera, renderer) {
@@ -1280,6 +1802,284 @@ export function worldToScreen(position, camera, renderer) {
     y: -(vector.y * heightHalf) + heightHalf
   };
 }
+
+// ============================================
+// Highway Ribbon Rendering
+// ============================================
+
+/**
+ * Create visual ribbons for all highways from the registry.
+ * Should be called after terrain is loaded.
+ * 
+ * @param {THREE.Scene} scene - The Three.js scene
+ * @returns {THREE.Group} The highway group
+ */
+export function createHighwayRibbons(scene) {
+  console.log('🛣️ Creating highway ribbons...');
+  
+  // Remove existing highway group if present
+  if (highwayGroup) {
+    scene.remove(highwayGroup);
+    highwayGroup.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
+    });
+  }
+  
+  highwayGroup = new THREE.Group();
+  highwayGroup.name = 'highways';
+  
+  let totalLength = 0;
+  
+  LINE_EMITTERS.forEach(highway => {
+    const profile = getProfile(highway.profile);
+    if (!profile) {
+      console.warn(`  ⚠️ Unknown profile "${highway.profile}" for highway "${highway.id}"`);
+      return;
+    }
+    
+    const ribbon = createHighwayRibbon(highway, profile);
+    if (ribbon) {
+      highwayGroup.add(ribbon);
+      totalLength += highway.waypoints.length - 1;
+    }
+  });
+  
+  scene.add(highwayGroup);
+  console.log(`  → ${LINE_EMITTERS.length} highway ribbons created (${totalLength} segments)`);
+  
+  return highwayGroup;
+}
+
+/**
+ * Create a single highway ribbon mesh
+ * 
+ * @param {Object} highway - Highway data from registry
+ * @param {Object} profile - Profile data
+ * @returns {THREE.Mesh|null}
+ */
+function createHighwayRibbon(highway, profile) {
+  const waypoints = highway.waypoints;
+  if (waypoints.length < 2) return null;
+  
+  // Convert waypoints to world coordinates with terrain height
+  const points = waypoints.map(wp => {
+    const world = registryGeoToWorld(wp.lon, wp.lat);
+    const terrainY = getTerrainHeight(world.x, world.z);
+    // Position slightly above terrain to prevent z-fighting
+    return new THREE.Vector3(world.x, terrainY + 0.2, world.z);
+  });
+  
+  // Get ribbon styling from profile
+  const ribbonWidth = profile.ribbonWidth || 0.6;
+  const ribbonColor = profile.ribbonColor || 0x5566aa;
+  const ribbonOpacity = profile.ribbonOpacity || 0.7;
+  
+  // Build the ribbon geometry
+  const { positions, indices } = buildRibbonGeometry(points, ribbonWidth);
+  
+  if (positions.length === 0) return null;
+  
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  
+  const material = new THREE.MeshBasicMaterial({
+    color: ribbonColor,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: ribbonOpacity,
+    depthWrite: false
+  });
+  
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = highway.id;
+  mesh.userData = { 
+    type: 'highway', 
+    id: highway.id, 
+    name: highway.name,
+    profile: highway.profile
+  };
+  mesh.renderOrder = 6; // Render above terrain but below grid
+  
+  return mesh;
+}
+
+/**
+ * Build ribbon geometry from a series of 3D points
+ * Creates a flat ribbon that follows the terrain
+ * 
+ * @param {Array<THREE.Vector3>} points - Array of 3D points
+ * @param {number} width - Ribbon width in world units
+ * @returns {{positions: Array, indices: Array}}
+ */
+function buildRibbonGeometry(points, width) {
+  const positions = [];
+  const indices = [];
+  const halfWidth = width / 2;
+  
+  if (points.length < 2) {
+    return { positions, indices };
+  }
+  
+  for (let i = 0; i < points.length; i++) {
+    const curr = points[i];
+    
+    // Calculate direction at this point
+    let dir;
+    if (i === 0) {
+      // First point: use direction to next point
+      dir = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
+    } else if (i === points.length - 1) {
+      // Last point: use direction from previous point
+      dir = new THREE.Vector3().subVectors(points[i], points[i - 1]).normalize();
+    } else {
+      // Interior points: average direction for smooth corners
+      const d1 = new THREE.Vector3().subVectors(curr, points[i - 1]).normalize();
+      const d2 = new THREE.Vector3().subVectors(points[i + 1], curr).normalize();
+      dir = d1.add(d2).normalize();
+      
+      // Handle 180-degree turns (very rare)
+      if (dir.length() < 0.001) {
+        dir = d1;
+      }
+    }
+    
+    // Perpendicular vector in XZ plane (horizontal ribbon)
+    const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(halfWidth);
+    
+    // Add left and right vertices
+    positions.push(
+      curr.x - perp.x, curr.y, curr.z - perp.z,  // Left vertex
+      curr.x + perp.x, curr.y, curr.z + perp.z   // Right vertex
+    );
+    
+    // Add quad indices (two triangles per segment)
+    if (i < points.length - 1) {
+      const idx = i * 2;
+      // Triangle 1: left-bottom, right-bottom, left-top
+      indices.push(idx, idx + 1, idx + 2);
+      // Triangle 2: right-bottom, right-top, left-top
+      indices.push(idx + 1, idx + 3, idx + 2);
+    }
+  }
+  
+  return { positions, indices };
+}
+
+/**
+ * Get the highway group
+ * @returns {THREE.Group|null}
+ */
+export function getHighwayGroup() {
+  return highwayGroup;
+}
+
+/**
+ * Set visibility of all highways
+ * @param {boolean} visible
+ */
+export function setHighwaysVisible(visible) {
+  if (highwayGroup) {
+    highwayGroup.visible = visible;
+  }
+}
+
+/**
+ * Set visibility of a specific highway
+ * @param {string} highwayId
+ * @param {boolean} visible
+ */
+export function setHighwayVisible(highwayId, visible) {
+  if (highwayGroup) {
+    const mesh = highwayGroup.getObjectByName(highwayId);
+    if (mesh) {
+      mesh.visible = visible;
+    }
+  }
+}
+
+// ============================================
+// Landmark Hover System
+// ============================================
+
+let currentHoveredLandmark = null;
+
+/**
+ * Get all landmark meshes for raycasting
+ * @returns {Array} Array of landmark group meshes
+ */
+export function getLandmarkMeshes() {
+  return landmarkMeshes;
+}
+
+/**
+ * Show label for a specific landmark group
+ * @param {THREE.Group} landmarkGroup - The landmark group to show label for
+ */
+export function showLandmarkLabel(landmarkGroup) {
+  if (landmarkGroup && landmarkGroup.userData.label) {
+    landmarkGroup.userData.label.visible = true;
+  }
+}
+
+/**
+ * Hide label for a specific landmark group
+ * @param {THREE.Group} landmarkGroup - The landmark group to hide label for
+ */
+export function hideLandmarkLabel(landmarkGroup) {
+  if (landmarkGroup && landmarkGroup.userData.label) {
+    landmarkGroup.userData.label.visible = false;
+  }
+}
+
+/**
+ * Hide all landmark labels
+ */
+export function hideAllLandmarkLabels() {
+  landmarkMeshes.forEach(group => {
+    if (group.userData.label) {
+      group.userData.label.visible = false;
+    }
+  });
+  currentHoveredLandmark = null;
+}
+
+/**
+ * Handle landmark hover - call this with raycast result
+ * @param {THREE.Group|null} landmarkGroup - The hovered landmark or null if none
+ */
+export function setHoveredLandmark(landmarkGroup) {
+  // If same as current, do nothing
+  if (landmarkGroup === currentHoveredLandmark) {
+    return;
+  }
+  
+  // Hide previous label
+  if (currentHoveredLandmark && currentHoveredLandmark.userData.label) {
+    currentHoveredLandmark.userData.label.visible = false;
+  }
+  
+  // Show new label
+  if (landmarkGroup && landmarkGroup.userData.label) {
+    landmarkGroup.userData.label.visible = true;
+  }
+  
+  currentHoveredLandmark = landmarkGroup;
+}
+
+/**
+ * Get the currently hovered landmark
+ * @returns {THREE.Group|null}
+ */
+export function getHoveredLandmark() {
+  return currentHoveredLandmark;
+}
+
+// ============================================
+// Cleanup
+// ============================================
 
 export function disposeMap() {
   if (terrain) {
@@ -1296,6 +2096,12 @@ export function disposeMap() {
       if (child.material) child.material.dispose();
     });
   });
+  if (highwayGroup) {
+    highwayGroup.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
+    });
+  }
 }
 
 /**

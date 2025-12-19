@@ -1,19 +1,25 @@
 /**
- * main.js — Bootstrap + render loop
+ * main.js â€” Bootstrap + render loop
  * 
  * Creates the Three.js core and wires all modules together.
- * Owns: scene, camera, renderer, appState, animation loop
+ * Uses fixed timestep from TimeManager for deterministic simulation.
+ * 
+ * RENDER LOOP PATTERN:
+ * 1. Get real delta time from clock
+ * 2. TimeManager.update() returns number of fixed steps to run
+ * 3. Run simulation N times with fixed dt (frame-rate independent)
+ * 4. Render once per frame (can interpolate for smoothness)
  */
 
 import * as THREE from 'three';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { initMap, disposeMap, getTerrainMesh } from './map.js';
+import { initMap, disposeMap, getTerrainMesh, createHighwayRibbons, getLandmarkMeshes, setHoveredLandmark } from './map.js';
 import { initControls, updateControls } from './controls.js';
 import { initHUD, updateHUD } from './hud.js';
 import { initPolluters } from './polluters.js';
 import { initTraffic } from './traffic.js';
 import { initOrchestrator, stepOrchestrator, resetOrchestrator, setPaused, getParticleCount } from './orchestrator.js';
-import { initSky, setTimeOfDay, updateSky, getTimeLabel } from './chronograph.js';
+import { TimeManager, initSky, setTimeOfDay, updateSky, getTimeLabel } from './chronograph.js';
 import { initContours, toggleContours, areContoursVisible } from './contours.js';
 
 // ============================================
@@ -21,9 +27,8 @@ import { initContours, toggleContours, areContoursVisible } from './contours.js'
 // ============================================
 export const appState = {
   paused: false,
-  simTime: 0,
-  frameCount: 0,
-  contoursInitialized: false
+  contoursInitialized: false,
+  highwaysInitialized: false
 };
 
 export const settings = {
@@ -59,6 +64,8 @@ export const settings = {
 let scene, camera, renderer;
 let clock;
 let stats;
+let raycaster, mouse;
+let isMouseOverCanvas = false;
 
 function initThree() {
   // Scene
@@ -105,6 +112,74 @@ function initThree() {
   
   // Handle resize
   window.addEventListener('resize', onWindowResize);
+  
+  // Raycaster for hover detection
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+  
+  // Mouse move listener for landmark hover
+  renderer.domElement.addEventListener('mousemove', onMouseMove);
+  renderer.domElement.addEventListener('mouseenter', () => { isMouseOverCanvas = true; });
+  renderer.domElement.addEventListener('mouseleave', () => { 
+    isMouseOverCanvas = false;
+    setHoveredLandmark(null);
+  });
+}
+
+/**
+ * Handle mouse movement for landmark hover detection
+ */
+function onMouseMove(event) {
+  // Calculate normalized device coordinates (-1 to +1)
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+}
+
+/**
+ * Check if mouse is hovering over a landmark and show/hide labels
+ */
+function checkLandmarkHover() {
+  if (!isMouseOverCanvas) {
+    return;
+  }
+  
+  // Update raycaster with camera and mouse position
+  raycaster.setFromCamera(mouse, camera);
+  
+  // Get landmark meshes
+  const landmarks = getLandmarkMeshes();
+  if (!landmarks || landmarks.length === 0) {
+    return;
+  }
+  
+  // Collect all meshes from landmark groups for intersection
+  const meshesToTest = [];
+  landmarks.forEach(group => {
+    group.traverse(child => {
+      if (child.isMesh && child.userData.type !== 'label') {
+        child.userData.parentLandmark = group;
+        meshesToTest.push(child);
+      }
+    });
+  });
+  
+  // Perform raycast
+  const intersects = raycaster.intersectObjects(meshesToTest, false);
+  
+  if (intersects.length > 0) {
+    // Find the parent landmark group
+    const hitMesh = intersects[0].object;
+    const landmarkGroup = hitMesh.userData.parentLandmark;
+    
+    if (landmarkGroup) {
+      setHoveredLandmark(landmarkGroup);
+      document.body.style.cursor = 'pointer';
+    }
+  } else {
+    setHoveredLandmark(null);
+    document.body.style.cursor = 'default';
+  }
 }
 
 function onWindowResize() {
@@ -119,7 +194,7 @@ function onWindowResize() {
 function tryInitContours() {
   const terrain = getTerrainMesh();
   if (terrain && !appState.contoursInitialized) {
-    console.log('🗺️ Terrain ready, initializing contours...');
+    console.log('ðŸ—ºï¸ Terrain ready, initializing contours...');
     initContours(terrain, scene);
     appState.contoursInitialized = true;
     
@@ -131,13 +206,29 @@ function tryInitContours() {
 }
 
 // ============================================
+// Highway Initialization (waits for terrain)
+// ============================================
+function tryInitHighways() {
+  const terrain = getTerrainMesh();
+  if (terrain && !appState.highwaysInitialized) {
+    console.log('🛣️ Terrain ready, initializing highways...');
+    createHighwayRibbons(scene);
+    appState.highwaysInitialized = true;
+  }
+}
+
+// ============================================
 // Initialization
 // ============================================
 async function init() {
-  console.log('🌁 Initializing Bay Area Air Quality Simulator...');
+  console.log('ðŸŒ Initializing Bay Area Air Quality Simulator...');
   
   // Initialize Three.js
   initThree();
+  
+  // Initialize TimeManager (fixed timestep system)
+  TimeManager.init();
+  TimeManager.setTimeScale(settings.timeScale);
   
   // Initialize sky system (must be before map for proper lighting)
   initSky(scene);
@@ -154,10 +245,17 @@ async function init() {
   initHUD(settings, {
     onChangeSettings: (newSettings) => {
       Object.assign(settings, newSettings);
+      
+      // Update time scale if changed
+      if ('timeScale' in newSettings) {
+        TimeManager.setTimeScale(newSettings.timeScale);
+      }
+      
       // Update sky if time or brightness changed
       if ('timeOfDay' in newSettings || 'brightness' in newSettings) {
         setTimeOfDay(settings.timeOfDay, scene, settings.brightness);
       }
+      
       // Handle contour toggle
       if ('showContours' in newSettings) {
         if (appState.contoursInitialized) {
@@ -170,10 +268,11 @@ async function init() {
     },
     onReset: () => {
       resetOrchestrator();
-      appState.simTime = 0;
+      TimeManager.reset();
     },
     onPauseToggle: () => {
       appState.paused = !appState.paused;
+      TimeManager.setPaused(appState.paused);
       setPaused(appState.paused);
     },
     onToggleContours: () => {
@@ -185,65 +284,87 @@ async function init() {
     }
   });
   
-  console.log('✅ Initialization complete. Starting simulation...');
+  console.log('âœ… Initialization complete. Starting simulation...');
   
   // Start animation loop
   animate();
 }
 
 // ============================================
-// Animation Loop
+// Animation Loop (Fixed Timestep)
 // ============================================
 function animate() {
   requestAnimationFrame(animate);
   
   stats.begin();
   
-  const dt = clock.getDelta();
+  // Get real elapsed time since last frame
+  const realDeltaTime = clock.getDelta();
   
-  // Update controls
-  updateControls(dt);
+  // Update controls (uses real time for smooth camera movement)
+  updateControls(realDeltaTime);
   
   // Try to initialize contours if terrain is ready
   if (!appState.contoursInitialized) {
     tryInitContours();
   }
   
-  // Auto time progression
-  if (settings.autoTime && !appState.paused) {
-    settings.timeOfDay += dt * settings.autoTimeSpeed;
-    if (settings.timeOfDay >= 24) {
-      settings.timeOfDay -= 24;
+  // Try to initialize highway ribbons if terrain is ready
+  if (!appState.highwaysInitialized) {
+    tryInitHighways();
+  }
+  
+  // ============================================
+  // FIXED TIMESTEP SIMULATION
+  // ============================================
+  // TimeManager returns how many fixed steps to run this frame
+  // This makes simulation deterministic regardless of frame rate
+  const steps = TimeManager.update(realDeltaTime);
+  const fixedDt = TimeManager.getDt();
+  
+  // Run simulation steps (may be 0, 1, 2, or more depending on frame rate)
+  for (let i = 0; i < steps; i++) {
+    // Auto time progression (uses fixed dt for consistency)
+    if (settings.autoTime && !appState.paused) {
+      settings.timeOfDay += fixedDt * settings.autoTimeSpeed;
+      if (settings.timeOfDay >= 24) {
+        settings.timeOfDay -= 24;
+      }
     }
+    
+    // Step the particle simulation with fixed dt
+    stepOrchestrator(fixedDt, settings);
+  }
+  
+  // ============================================
+  // VISUAL UPDATES (once per frame)
+  // ============================================
+  // These can use real delta time or be frame-based
+  
+  // Check for landmark hover
+  checkLandmarkHover();
+  
+  // Update sky visuals
+  if (settings.autoTime && steps > 0) {
     setTimeOfDay(settings.timeOfDay, scene, settings.brightness);
   }
-  
-  // Update sky
-  updateSky(dt, settings.timeOfDay);
-  
-  // Step simulation if not paused
-  if (!appState.paused) {
-    const simDt = dt * settings.timeScale;
-    appState.simTime += simDt;
-    stepOrchestrator(simDt, settings);
-  }
+  updateSky(realDeltaTime, settings.timeOfDay);
   
   // Update HUD
   updateHUD({
     particleCount: getParticleCount(),
-    simTime: appState.simTime,
+    simTime: TimeManager.getTime(),
     paused: appState.paused,
     timeOfDay: settings.timeOfDay,
     timeLabel: getTimeLabel(settings.timeOfDay),
-    contoursVisible: areContoursVisible()
+    contoursVisible: areContoursVisible(),
+    fps: TimeManager.getStats().fps
   });
   
   // Render
   renderer.render(scene, camera);
   
   stats.end();
-  
-  appState.frameCount++;
 }
 
 // ============================================
@@ -256,4 +377,5 @@ init().catch(err => {
 // Export for debugging
 window.appState = appState;
 window.settings = settings;
-window.toggleContours = toggleContours; // Allow toggling from console
+window.TimeManager = TimeManager;
+window.toggleContours = toggleContours;

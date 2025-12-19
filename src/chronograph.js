@@ -1,17 +1,158 @@
 /**
- * sky.js Ã¢â‚¬â€ Dynamic sky and lighting system
+ * chronograph.js — Central timing system + Dynamic sky and lighting
  * 
- * Handles time-of-day transitions with changing sky colors,
+ * Provides frame-rate independent simulation timing using fixed timestep.
+ * Also handles time-of-day transitions with changing sky colors,
  * sun/moon positioning, and atmospheric lighting.
+ * 
+ * FIXED TIMESTEP PATTERN:
+ * - Simulation always advances in fixed increments (e.g., 1/60th second)
+ * - At 30fps: runs 2 simulation steps per frame
+ * - At 60fps: runs 1 simulation step per frame  
+ * - At 120fps: runs 1 step every other frame (accumulates)
+ * - Result: identical simulation output regardless of frame rate
  */
 
 import * as THREE from 'three';
 
 // ============================================
-// Configuration
+// FIXED TIMESTEP TIME MANAGER
 // ============================================
 
-// Time periods (0-24 hour scale)
+export const TimeManager = {
+  // Configuration
+  fixedDeltaTime: 1 / 60,      // Fixed timestep: 60 updates per second (16.67ms)
+  maxSubSteps: 8,              // Max simulation steps per frame (prevents spiral of death)
+  
+  // State
+  accumulator: 0,              // Accumulated real time to be processed
+  simulationTime: 0,           // Total simulation time elapsed (in fixed steps)
+  paused: false,
+  timeScale: 1.0,              // Speed multiplier (1.0 = normal)
+  
+  // Performance tracking
+  avgFrameTime: 1/60,
+  frameCount: 0,
+  stepsThisFrame: 0,
+  
+  /**
+   * Initialize the time manager
+   */
+  init() {
+    this.accumulator = 0;
+    this.simulationTime = 0;
+    this.paused = false;
+    this.timeScale = 1.0;
+    this.avgFrameTime = this.fixedDeltaTime;
+    this.frameCount = 0;
+    this.stepsThisFrame = 0;
+    console.log(`⏱️ TimeManager initialized (fixed dt: ${(this.fixedDeltaTime * 1000).toFixed(2)}ms = ${Math.round(1/this.fixedDeltaTime)} sim Hz)`);
+  },
+  
+  /**
+   * Call once per render frame with actual elapsed time.
+   * Returns number of fixed simulation steps to run this frame.
+   * 
+   * @param {number} realDeltaTime - Actual seconds since last frame
+   * @returns {number} Number of fixed steps to execute
+   */
+  update(realDeltaTime) {
+    this.frameCount++;
+    this.avgFrameTime = this.avgFrameTime * 0.95 + realDeltaTime * 0.05;
+    
+    if (this.paused) {
+      this.stepsThisFrame = 0;
+      return 0;
+    }
+    
+    // Scale and accumulate time
+    const scaledDelta = realDeltaTime * this.timeScale;
+    this.accumulator += scaledDelta;
+    
+    // Cap to prevent spiral of death (when sim can't keep up)
+    const maxAccumulator = this.fixedDeltaTime * this.maxSubSteps;
+    if (this.accumulator > maxAccumulator) {
+      this.accumulator = maxAccumulator;
+    }
+    
+    // Count how many fixed steps fit in accumulated time
+    let steps = 0;
+    while (this.accumulator >= this.fixedDeltaTime) {
+      this.accumulator -= this.fixedDeltaTime;
+      this.simulationTime += this.fixedDeltaTime;
+      steps++;
+    }
+    
+    this.stepsThisFrame = steps;
+    return steps;
+  },
+  
+  /**
+   * Get the fixed delta time - USE THIS IN ALL SIMULATION CODE
+   * This value never changes, ensuring deterministic behavior
+   */
+  getDt() {
+    return this.fixedDeltaTime;
+  },
+  
+  /**
+   * Get interpolation alpha (0-1) for smooth rendering between steps
+   * Use to interpolate visual positions: lerp(prevPos, currPos, alpha)
+   */
+  getAlpha() {
+    return this.accumulator / this.fixedDeltaTime;
+  },
+  
+  /**
+   * Get total simulation time elapsed
+   */
+  getTime() {
+    return this.simulationTime;
+  },
+  
+  /**
+   * Pause/unpause simulation
+   */
+  setPaused(paused) {
+    this.paused = paused;
+    console.log(paused ? '⏸️ Simulation paused' : '▶️ Simulation resumed');
+  },
+  
+  /**
+   * Set time scale (1.0 = normal, 2.0 = 2x speed, 0.5 = half speed)
+   */
+  setTimeScale(scale) {
+    this.timeScale = Math.max(0.1, Math.min(10, scale));
+  },
+  
+  /**
+   * Reset simulation time to zero
+   */
+  reset() {
+    this.accumulator = 0;
+    this.simulationTime = 0;
+    console.log('🔄 TimeManager reset');
+  },
+  
+  /**
+   * Get performance/debug stats
+   */
+  getStats() {
+    return {
+      fps: Math.round(1 / this.avgFrameTime),
+      simTime: this.simulationTime,
+      stepsLastFrame: this.stepsThisFrame,
+      timeScale: this.timeScale,
+      paused: this.paused
+    };
+  }
+};
+
+
+// ============================================
+// SKY SYSTEM CONFIGURATION
+// ============================================
+
 const TIME_PERIODS = {
   NIGHT: { start: 0, end: 5 },
   DAWN: { start: 5, end: 7 },
@@ -148,7 +289,7 @@ const SKY_PRESETS = {
 };
 
 // ============================================
-// State
+// Sky State
 // ============================================
 
 let scene = null;
@@ -160,7 +301,6 @@ let fillLight = null;
 let sunMesh = null;
 let moonMesh = null;
 
-// Current interpolated values
 const currentColors = {
   skyTop: new THREE.Color(),
   skyBottom: new THREE.Color(),
@@ -171,11 +311,11 @@ const currentColors = {
 };
 
 // ============================================
-// Initialization
+// Sky Initialization
 // ============================================
 
 export function initSky(sceneRef) {
-  console.log('Ã°Å¸Å’â€¦ Initializing sky system...');
+  console.log('🌅 Initializing sky system...');
   scene = sceneRef;
   
   createSkyDome();
@@ -196,7 +336,6 @@ export function initSky(sceneRef) {
 function createSkyDome() {
   const geometry = new THREE.SphereGeometry(400, 32, 32);
   
-  // Custom shader for gradient sky
   const material = new THREE.ShaderMaterial({
     uniforms: {
       topColor: { value: new THREE.Color(0x0a0a1a) },
@@ -224,7 +363,6 @@ function createSkyDome() {
       void main() {
         float h = normalize(vWorldPosition + offset).y;
         
-        // Three-way gradient: bottom -> horizon -> top
         vec3 color;
         if (h < 0.0) {
           color = bottomColor;
@@ -258,13 +396,12 @@ function createStarField() {
   const sizes = new Float32Array(starCount);
   
   for (let i = 0; i < starCount; i++) {
-    // Distribute stars on upper hemisphere
     const theta = Math.random() * Math.PI * 2;
-    const phi = Math.random() * Math.PI * 0.5; // Upper hemisphere only
+    const phi = Math.random() * Math.PI * 0.5;
     const radius = 350;
     
     positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-    positions[i * 3 + 1] = radius * Math.cos(phi) + 50; // Offset upward
+    positions[i * 3 + 1] = radius * Math.cos(phi) + 50;
     positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
     
     sizes[i] = Math.random() * 2 + 0.5;
@@ -351,17 +488,14 @@ function createCelestialBodies() {
 // ============================================
 
 function createLighting() {
-  // Remove existing lights from scene if any
   scene.children = scene.children.filter(child => 
     !(child instanceof THREE.AmbientLight) && 
     !(child instanceof THREE.DirectionalLight)
   );
   
-  // Ambient light
   ambientLight = new THREE.AmbientLight(0x1a1a2e, 0.5);
   scene.add(ambientLight);
   
-  // Main sun/moon directional light
   sunLight = new THREE.DirectionalLight(0xffeedd, 1.0);
   sunLight.position.set(50, 80, 30);
   sunLight.castShadow = true;
@@ -375,7 +509,6 @@ function createLighting() {
   sunLight.shadow.camera.bottom = -100;
   scene.add(sunLight);
   
-  // Fill light (cool, from opposite side)
   fillLight = new THREE.DirectionalLight(0x4488ff, 0.2);
   fillLight.position.set(-30, 40, -50);
   scene.add(fillLight);
@@ -386,10 +519,8 @@ function createLighting() {
 // ============================================
 
 export function setTimeOfDay(hour, scene, brightness = 1.0) {
-  // hour is 0-24
   const normalizedHour = ((hour % 24) + 24) % 24;
   
-  // Find the two nearest presets to interpolate between
   const presetHours = Object.keys(SKY_PRESETS).map(Number).sort((a, b) => a - b);
   
   let lowerHour = presetHours[0];
@@ -405,23 +536,19 @@ export function setTimeOfDay(hour, scene, brightness = 1.0) {
     }
   }
   
-  // Handle wrap-around at midnight
   if (upperHour <= lowerHour) {
     upperHour = presetHours[0] + 24;
   }
   
-  // Calculate interpolation factor
   let t = 0;
   if (upperHour !== lowerHour) {
     const adjustedHour = normalizedHour < lowerHour ? normalizedHour + 24 : normalizedHour;
     t = (adjustedHour - lowerHour) / (upperHour - lowerHour);
   }
   
-  // Get presets
   const lowerPreset = SKY_PRESETS[lowerHour];
   const upperPreset = SKY_PRESETS[upperHour % 24] || SKY_PRESETS[0];
   
-  // Interpolate colors
   currentColors.skyTop.copy(lowerPreset.skyTop).lerp(upperPreset.skyTop, t);
   currentColors.skyBottom.copy(lowerPreset.skyBottom).lerp(upperPreset.skyBottom, t);
   currentColors.horizon.copy(lowerPreset.horizon).lerp(upperPreset.horizon, t);
@@ -432,23 +559,19 @@ export function setTimeOfDay(hour, scene, brightness = 1.0) {
   const ambientIntensity = THREE.MathUtils.lerp(lowerPreset.ambientIntensity, upperPreset.ambientIntensity, t);
   const sunIntensity = THREE.MathUtils.lerp(lowerPreset.sunIntensity, upperPreset.sunIntensity, t);
   
-  // Interpolate sun position
   const sunPos = new THREE.Vector3().copy(lowerPreset.sunPosition).lerp(upperPreset.sunPosition, t);
   
-  // Apply to sky dome
   if (skyMesh) {
     skyMesh.material.uniforms.topColor.value.copy(currentColors.skyTop);
     skyMesh.material.uniforms.bottomColor.value.copy(currentColors.skyBottom);
     skyMesh.material.uniforms.horizonColor.value.copy(currentColors.horizon);
   }
   
-  // Apply fog
   if (scene.fog) {
     scene.fog.color.copy(currentColors.fog);
   }
   scene.background = currentColors.fog.clone();
   
-  // Apply lighting with brightness multiplier
   if (ambientLight) {
     ambientLight.color.copy(currentColors.ambient);
     ambientLight.intensity = ambientIntensity * brightness;
@@ -464,17 +587,15 @@ export function setTimeOfDay(hour, scene, brightness = 1.0) {
     fillLight.intensity = 0.2 * brightness;
   }
   
-  // Update sun mesh position and visibility
   if (sunMesh) {
     const sunDistance = 300;
-    const sunAngle = ((normalizedHour - 6) / 12) * Math.PI; // 6am = horizon, 12pm = top
+    const sunAngle = ((normalizedHour - 6) / 12) * Math.PI;
     sunMesh.position.set(
       Math.cos(sunAngle) * sunDistance * 0.3,
       Math.sin(sunAngle) * sunDistance * 0.8,
       -50
     );
     
-    // Fade sun based on position
     const sunVisible = normalizedHour >= 5 && normalizedHour <= 20;
     sunMesh.visible = sunVisible;
     if (sunVisible) {
@@ -484,9 +605,8 @@ export function setTimeOfDay(hour, scene, brightness = 1.0) {
     }
   }
   
-  // Update moon position and visibility
   if (moonMesh) {
-    const moonAngle = ((normalizedHour + 6) / 12) * Math.PI; // Opposite of sun
+    const moonAngle = ((normalizedHour + 6) / 12) * Math.PI;
     const moonDistance = 280;
     moonMesh.position.set(
       -Math.cos(moonAngle) * moonDistance * 0.3,
@@ -494,7 +614,6 @@ export function setTimeOfDay(hour, scene, brightness = 1.0) {
       50
     );
     
-    // Moon visible at night
     const moonVisible = normalizedHour >= 19 || normalizedHour <= 6;
     moonMesh.visible = moonVisible;
     if (moonVisible) {
@@ -505,9 +624,7 @@ export function setTimeOfDay(hour, scene, brightness = 1.0) {
     }
   }
   
-  // Update star visibility
   if (starField) {
-    // Stars visible from dusk to dawn
     let starOpacity = 0;
     if (normalizedHour >= 19) {
       starOpacity = Math.min(1, (normalizedHour - 19) / 2);
@@ -519,9 +636,8 @@ export function setTimeOfDay(hour, scene, brightness = 1.0) {
 }
 
 export function updateSky(dt, timeOfDay) {
-  // Could add subtle animations here (cloud movement, star twinkle, etc.)
   if (starField) {
-    starField.rotation.y += dt * 0.001; // Very slow rotation
+    starField.rotation.y += dt * 0.001;
   }
 }
 
