@@ -769,8 +769,213 @@ function createGrid(scene) {
   
   console.log(`[Grid] Created ${ribbonSegments.length} ribbon segments`);
   
+  // Create compass rose in southwest corner
+  createCompassRose(gridGroup, halfWidth, halfDepth, gridY);
+  
   scene.add(gridGroup);
   gridHelper = gridGroup;
+}
+
+/**
+ * Create a 3D compass rose mesh
+ */
+function createCompassRose(parentGroup, halfWidth, halfDepth, gridY) {
+  const compassGroup = new THREE.Group();
+  compassGroup.name = 'compassRose';
+  
+  // Convert geo coordinates to world position
+  const geoToWorldLocal = (lon, lat) => {
+    const x = ((lon - GEO_BOUNDS.lonMin) / (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin) - 0.5) * MAP_BOUNDS.width;
+    const z = (0.5 - (lat - GEO_BOUNDS.latMin) / (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin)) * MAP_BOUNDS.depth;
+    return { x, z };
+  };
+  
+  // Position at 37.5°N, 122.8°W
+  const compassPos = geoToWorldLocal(-122.8, 37.5);
+  const compassX = compassPos.x;
+  const compassZ = compassPos.z;
+  const compassY = gridY + 0.5;
+  
+  // Compass dimensions
+  const outerRadius = 8;
+  const innerRadius = 3;
+  const cardinalLength = outerRadius;
+  const ordinalLength = outerRadius * 0.6;
+  const arrowWidth = 1.2;
+  const ordinalWidth = 0.8;
+  const thickness = 0.3;
+  
+  // Colors
+  const northColor = 0xcc3333;    // Red for North
+  const southColor = 0xdddddd;    // White/light gray
+  const eastWestColor = 0xdddddd; // White/light gray
+  const ordinalColor = 0x888899;  // Gray for NE, SE, SW, NW
+  const ringColor = 0x4a5a6a;     // Ring color
+  const centerColor = 0x2a3a4a;   // Center disc
+  
+  // Helper to create an arrow/pointer shape
+  const createArrow = (length, width, color, rotation) => {
+    const shape = new THREE.Shape();
+    shape.moveTo(0, length);           // Tip
+    shape.lineTo(-width / 2, 0);       // Bottom left
+    shape.lineTo(0, length * 0.3);     // Inner notch
+    shape.lineTo(width / 2, 0);        // Bottom right
+    shape.closePath();
+    
+    const extrudeSettings = {
+      depth: thickness,
+      bevelEnabled: false
+    };
+    
+    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    geometry.rotateX(-Math.PI / 2); // Lay flat
+    geometry.rotateY(rotation);     // Point in direction
+    
+    const material = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.5,
+      metalness: 0.3,
+      emissive: color,
+      emissiveIntensity: 0.2
+    });
+    
+    return new THREE.Mesh(geometry, material);
+  };
+  
+  // Create cardinal direction arrows (N, S, E, W)
+  // After rotateX(-PI/2), the arrow tip points toward -Z, so:
+  // rotation = 0 → -Z (North), rotation = PI → +Z (South)
+  // rotation = -PI/2 → +X (East), rotation = PI/2 → -X (West)
+  
+  // North (negative Z in world space = higher latitude)
+  const northArrow = createArrow(cardinalLength, arrowWidth, northColor, 0);
+  northArrow.position.y = 0.05; // Slight positive offset to sit above other arrows
+  compassGroup.add(northArrow);
+  
+  // South (positive Z)
+  const southArrow = createArrow(cardinalLength, arrowWidth, southColor, Math.PI);
+  compassGroup.add(southArrow);
+  
+  // East (positive X)
+  const eastArrow = createArrow(cardinalLength, arrowWidth, eastWestColor, -Math.PI / 2);
+  compassGroup.add(eastArrow);
+  
+  // West (negative X)
+  const westArrow = createArrow(cardinalLength, arrowWidth, eastWestColor, Math.PI / 2);
+  compassGroup.add(westArrow);
+  
+  // Create ordinal direction arrows (NE, SE, SW, NW)
+  // NE: -PI/4, SE: -3PI/4, SW: 3PI/4, NW: PI/4
+  const neArrow = createArrow(ordinalLength, ordinalWidth, ordinalColor, -Math.PI / 4);
+  neArrow.position.y = -0.05; // Slight offset to prevent z-fighting
+  compassGroup.add(neArrow);
+  
+  const seArrow = createArrow(ordinalLength, ordinalWidth, ordinalColor, -3 * Math.PI / 4);
+  seArrow.position.y = -0.05;
+  compassGroup.add(seArrow);
+  
+  const swArrow = createArrow(ordinalLength, ordinalWidth, ordinalColor, 3 * Math.PI / 4);
+  swArrow.position.y = -0.05;
+  compassGroup.add(swArrow);
+  
+  const nwArrow = createArrow(ordinalLength, ordinalWidth, ordinalColor, Math.PI / 4);
+  nwArrow.position.y = -0.05;
+  compassGroup.add(nwArrow);
+  
+  // Center disc with negative Y offset to prevent z-fighting
+  const centerGeometry = new THREE.CylinderGeometry(innerRadius, innerRadius, thickness, 32);
+  const centerMaterial = new THREE.MeshStandardMaterial({
+    color: centerColor,
+    roughness: 0.4,
+    metalness: 0.5
+  });
+  const centerDisc = new THREE.Mesh(centerGeometry, centerMaterial);
+  centerDisc.position.y = -0.1; // Slight negative offset to prevent z-fighting
+  compassGroup.add(centerDisc);
+  
+  // Outer octagon ring
+  const octagonRadius = outerRadius + 1;
+  const octagonThickness = 0.5;
+  const octagonHeight = 0.4;
+  
+  // Create octagon shape
+  const octagonShape = new THREE.Shape();
+  const sides = 8;
+  for (let i = 0; i < sides; i++) {
+    const angle = (i / sides) * Math.PI * 2 - Math.PI / 8; // Offset to align flat edge with directions
+    const x = Math.cos(angle) * octagonRadius;
+    const y = Math.sin(angle) * octagonRadius;
+    if (i === 0) {
+      octagonShape.moveTo(x, y);
+    } else {
+      octagonShape.lineTo(x, y);
+    }
+  }
+  octagonShape.closePath();
+  
+  // Create inner hole for the octagon ring
+  const innerOctagonPath = new THREE.Path();
+  const innerOctagonRadius = octagonRadius - octagonThickness;
+  for (let i = 0; i < sides; i++) {
+    const angle = (i / sides) * Math.PI * 2 - Math.PI / 8;
+    const x = Math.cos(angle) * innerOctagonRadius;
+    const y = Math.sin(angle) * innerOctagonRadius;
+    if (i === 0) {
+      innerOctagonPath.moveTo(x, y);
+    } else {
+      innerOctagonPath.lineTo(x, y);
+    }
+  }
+  innerOctagonPath.closePath();
+  octagonShape.holes.push(innerOctagonPath);
+  
+  const octagonExtrudeSettings = {
+    depth: octagonHeight,
+    bevelEnabled: false
+  };
+  
+  const octagonGeometry = new THREE.ExtrudeGeometry(octagonShape, octagonExtrudeSettings);
+  octagonGeometry.rotateX(-Math.PI / 2); // Lay flat
+  
+  const octagonMaterial = new THREE.MeshStandardMaterial({
+    color: ringColor,
+    roughness: 0.5,
+    metalness: 0.4
+  });
+  
+  const octagonRing = new THREE.Mesh(octagonGeometry, octagonMaterial);
+  octagonRing.position.y = 0;
+  compassGroup.add(octagonRing);
+  
+  // Add direction labels
+  const labelOffset = outerRadius + 3;
+  const labelY = thickness + 0.5;
+  
+  // N label
+  const labelN = createCoordLabel('N', 0, labelY, -labelOffset, 'compass');
+  if (labelN) {
+    labelN.material.color.setHex(0xff4444);
+    compassGroup.add(labelN);
+  }
+  
+  // S label
+  const labelS = createCoordLabel('S', 0, labelY, labelOffset, 'compass');
+  if (labelS) compassGroup.add(labelS);
+  
+  // E label
+  const labelE = createCoordLabel('E', labelOffset, labelY, 0, 'compass');
+  if (labelE) compassGroup.add(labelE);
+  
+  // W label
+  const labelW = createCoordLabel('W', -labelOffset, labelY, 0, 'compass');
+  if (labelW) compassGroup.add(labelW);
+  
+  // Position the compass group
+  compassGroup.position.set(compassX, compassY, compassZ);
+  
+  parentGroup.add(compassGroup);
+  
+  console.log(`[Grid] Compass rose created at 37.5°N, 122.8°W (world: ${compassX.toFixed(1)}, ${compassY.toFixed(1)}, ${compassZ.toFixed(1)})`);
 }
 
 /**
