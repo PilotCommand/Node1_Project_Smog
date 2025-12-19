@@ -6,6 +6,10 @@
  * 
  * Point sources: cities, airports, refineries, ports, bridges, etc.
  * Line sources: highways (distributed emissions along route)
+ * 
+ * NOTE: The orchestrator uses spatial binning for rendering - particles
+ * are grouped into grid cells and rendered as concentration-based prisms.
+ * Individual particle size is not used for rendering anymore.
  */
 
 import {
@@ -26,34 +30,37 @@ import {
 /**
  * Physical properties of each pollutant type.
  * These control how particles behave after emission.
+ * 
+ * Properties used by orchestrator physics:
+ *   - settlingRate: Vertical fall speed for particulates (0 for gases)
+ *   - disperseRate: Horizontal turbulent spreading rate
+ *   - decayRate: How quickly particles fade/decay
+ *   - color: Used for the rendered prism color
  */
 export const POLLUTANT_TYPES = {
   PM25: {
     id: 'PM25',
     name: 'PM2.5',
     color: 0xff6b35,       // Warm orange
-    settlingRate: 0.15,    // Falls to ground (m/s)
-    disperseRate: 0.8,     // Horizontal spread rate
-    decayRate: 0.002,      // Opacity fade rate
-    size: 0.4              // Particle visual size
+    settlingRate: 0.12,    // Falls to ground (m/s) - particulate matter settles
+    disperseRate: 0.7,     // Horizontal spread rate
+    decayRate: 0.003,      // Slow decay - PM persists
   },
   VOC: {
     id: 'VOC',
     name: 'VOCs',
     color: 0xa855f7,       // Purple
     settlingRate: 0.0,     // Gas - doesn't settle
-    disperseRate: 1.5,     // Disperses quickly
-    decayRate: 0.005,      // Moderate decay
-    size: 0.3
+    disperseRate: 1.4,     // Disperses quickly (lighter molecules)
+    decayRate: 0.006,      // Moderate decay (reactive)
   },
   OZONE: {
     id: 'OZONE',
     name: 'O₃',
     color: 0x06b6d4,       // Cyan
     settlingRate: 0.0,     // Gas - doesn't settle
-    disperseRate: 1.2,     // Moderate dispersion
-    decayRate: 0.008,      // Faster decay (reactive)
-    size: 0.25
+    disperseRate: 1.1,     // Moderate dispersion
+    decayRate: 0.010,      // Faster decay (highly reactive)
   }
 };
 

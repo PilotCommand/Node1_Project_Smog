@@ -289,7 +289,7 @@
 
     #info-panel {
       position: fixed;
-      top: 60px;
+      top: 80px;
       right: 20px;
       z-index: 100;
     }
@@ -414,17 +414,17 @@
       <div class="control-group">
         <div class="control-label">
           Wind Direction
-          <span class="control-value" id="wind-dir-value">225°</span>
+          <span class="control-value" id="wind-dir-value">120°</span>
         </div>
-        <input type="range" id="wind-direction" min="0" max="360" value="225">
+        <input type="range" id="wind-direction" min="0" max="360" value="120">
       </div>
       
       <div class="control-group">
         <div class="control-label">
           Wind Speed
-          <span class="control-value" id="wind-speed-value">5.0 m/s</span>
+          <span class="control-value" id="wind-speed-value">4.0 m/s</span>
         </div>
-        <input type="range" id="wind-speed" min="0" max="15" step="0.5" value="5">
+        <input type="range" id="wind-speed" min="0" max="15" step="0.5" value="4">
       </div>
       
       <div class="control-group">
@@ -442,9 +442,9 @@
       <div class="control-group">
         <div class="control-label">
           Emission Rate
-          <span class="control-value" id="emission-rate-value">1.0x</span>
+          <span class="control-value" id="emission-rate-value">0.2x</span>
         </div>
-        <input type="range" id="emission-rate" min="0" max="3" step="0.1" value="1">
+        <input type="range" id="emission-rate" min="0" max="3" step="0.1" value="0.2">
       </div>
       
       <div class="toggle-row">
@@ -499,6 +499,7 @@
   <div id="title-panel">
     <h1>Bay Area AQI</h1>
     <p>Atmospheric Transport Model</p>
+    <p>Developed By Mohammad Elassaad</p>
   </div>
   
   <div class="landmark-labels" id="landmark-labels"></div>

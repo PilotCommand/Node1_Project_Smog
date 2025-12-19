@@ -1,5 +1,5 @@
 /**
- * main.js â€” Bootstrap + render loop
+ * main.js ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Bootstrap + render loop
  * 
  * Creates the Three.js core and wires all modules together.
  * Uses fixed timestep from TimeManager for deterministic simulation.
@@ -18,9 +18,10 @@ import { initControls, updateControls } from './controls.js';
 import { initHUD, updateHUD } from './hud.js';
 import { initPolluters } from './polluters.js';
 import { initTraffic } from './traffic.js';
-import { initOrchestrator, stepOrchestrator, resetOrchestrator, setPaused, getParticleCount } from './orchestrator.js';
+import { initOrchestrator, stepOrchestrator, resetOrchestrator, setPaused, getParticleCount, getParticles } from './orchestrator.js';
 import { TimeManager, initSky, setTimeOfDay, updateSky, getTimeLabel } from './chronograph.js';
 import { initContours, toggleContours, areContoursVisible } from './contours.js';
+import { initCounties, updatePollutionFromParticles, toggleCounties as toggleCountyRegions, areCountiesVisible } from './county.js';
 
 // ============================================
 // Global App State
@@ -28,17 +29,18 @@ import { initContours, toggleContours, areContoursVisible } from './contours.js'
 export const appState = {
   paused: false,
   contoursInitialized: false,
-  highwaysInitialized: false
+  highwaysInitialized: false,
+  countiesInitialized: false
 };
 
 export const settings = {
   // Wind / Transport
-  windDirection: 225,    // degrees (0 = North, 90 = East, etc.)
-  windSpeed: 5.0,        // m/s
+  windDirection: 120,    // degrees (0 = North, 90 = East, etc.)
+  windSpeed: 4.0,        // m/s
   turbulence: 0.3,       // 0-1 mixing strength
   
   // Emissions
-  emissionRate: 1.0,     // multiplier
+  emissionRate: 0.2,     // multiplier
   
   // Pollutant toggles
   enablePM25: true,
@@ -194,7 +196,7 @@ function onWindowResize() {
 function tryInitContours() {
   const terrain = getTerrainMesh();
   if (terrain && !appState.contoursInitialized) {
-    console.log('ðŸ—ºï¸ Terrain ready, initializing contours...');
+    console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬â€Ã‚ÂºÃƒÂ¯Ã‚Â¸Ã‚Â Terrain ready, initializing contours...');
     initContours(terrain, scene);
     appState.contoursInitialized = true;
     
@@ -211,9 +213,19 @@ function tryInitContours() {
 function tryInitHighways() {
   const terrain = getTerrainMesh();
   if (terrain && !appState.highwaysInitialized) {
-    console.log('🛣️ Terrain ready, initializing highways...');
+    console.log('Ã°Å¸â€ºÂ£Ã¯Â¸Â Terrain ready, initializing highways...');
     createHighwayRibbons(scene);
     appState.highwaysInitialized = true;
+  }
+}
+
+// ============================================
+// County Initialization (can init immediately)
+// ============================================
+function tryInitCounties() {
+  if (!appState.countiesInitialized) {
+    initCounties(scene);
+    appState.countiesInitialized = true;
   }
 }
 
@@ -221,7 +233,7 @@ function tryInitHighways() {
 // Initialization
 // ============================================
 async function init() {
-  console.log('ðŸŒ Initializing Bay Area Air Quality Simulator...');
+  console.log('ÃƒÂ°Ã…Â¸Ã…â€™Ã‚Â Initializing Bay Area Air Quality Simulator...');
   
   // Initialize Three.js
   initThree();
@@ -284,7 +296,7 @@ async function init() {
     }
   });
   
-  console.log('âœ… Initialization complete. Starting simulation...');
+  console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Initialization complete. Starting simulation...');
   
   // Start animation loop
   animate();
@@ -312,6 +324,11 @@ function animate() {
   // Try to initialize highway ribbons if terrain is ready
   if (!appState.highwaysInitialized) {
     tryInitHighways();
+  }
+  
+  // Try to initialize county regions
+  if (!appState.countiesInitialized) {
+    tryInitCounties();
   }
   
   // ============================================
@@ -343,6 +360,11 @@ function animate() {
   
   // Check for landmark hover
   checkLandmarkHover();
+  
+  // Update county pollution levels based on particle positions
+  if (appState.countiesInitialized) {
+    updatePollutionFromParticles(getParticles());
+  }
   
   // Update sky visuals
   if (settings.autoTime && steps > 0) {
@@ -379,3 +401,4 @@ window.appState = appState;
 window.settings = settings;
 window.TimeManager = TimeManager;
 window.toggleContours = toggleContours;
+window.toggleCounties = toggleCountyRegions;
