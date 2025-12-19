@@ -1,5 +1,5 @@
 /**
- * traffic.js — "Atmospheric traffic" transport field ("how air moves")
+ * traffic.js - "Atmospheric traffic" transport field ("how air moves")
  * 
  * Provides the atmospheric motion model (advection + mixing).
  * Owns: velocity field function, wind parameters, turbulence
@@ -23,7 +23,7 @@ const _noise = new THREE.Vector3();
 // ============================================
 
 export function initTraffic(map, settings) {
-  console.log('💨 Initializing atmospheric transport...');
+  console.log('ðŸ’¨ Initializing atmospheric transport...');
   mapData = map;
 }
 

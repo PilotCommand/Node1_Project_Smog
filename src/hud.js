@@ -1,5 +1,5 @@
 /**
- * hud.js â€” UI overlay (HTML)
+ * hud.js - UI overlay (HTML)
  * 
  * Provides user controls and feedback without touching simulation internals.
  * Owns: HTML overlay, event listeners, sliders/toggles
@@ -13,7 +13,7 @@ let elements = {};
 // ============================================
 
 export function initHUD(settings, cbs) {
-  console.log('ðŸ–¥ï¸ Initializing HUD...');
+  console.log('Initializing HUD...');
   
   callbacks = cbs;
   
@@ -93,7 +93,7 @@ function syncFromSettings(settings) {
   
   if (elements.windDirection) {
     elements.windDirection.value = settings.windDirection;
-    elements.windDirValue.textContent = `${settings.windDirection}Â°`;
+    elements.windDirValue.textContent = `${settings.windDirection}°`;
   }
   
   if (elements.windSpeed) {
@@ -171,7 +171,7 @@ function attachListeners(settings) {
   // Wind Direction
   elements.windDirection?.addEventListener('input', (e) => {
     const value = parseFloat(e.target.value);
-    elements.windDirValue.textContent = `${value}Â°`;
+    elements.windDirValue.textContent = `${value}°`;
     callbacks.onChangeSettings?.({ windDirection: value });
   });
   

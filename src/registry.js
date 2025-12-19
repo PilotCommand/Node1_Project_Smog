@@ -227,13 +227,13 @@ export const EMITTER_PROFILES = {
   },
 
   // ─────────────────────────────────────────
-  // HIGHWAYS (line sources - per km rates)
+  // HIGHWAYS (line sources - visual only, no emissions)
   // ─────────────────────────────────────────
   HIGHWAY_MAJOR: {
     type: 'highway',
     height: 0.5,
     spread: 0.6,
-    emissionsPerKm: { PM25: 0.8, VOC: 0.5, OZONE: 0 },
+    emissionsPerKm: { PM25: 0, VOC: 0, OZONE: 0 },
     ribbonColor: 0x5566aa,
     ribbonWidth: 0.8,
     ribbonOpacity: 0.7,
@@ -243,7 +243,7 @@ export const EMITTER_PROFILES = {
     type: 'highway',
     height: 0.5,
     spread: 0.4,
-    emissionsPerKm: { PM25: 0.4, VOC: 0.25, OZONE: 0 },
+    emissionsPerKm: { PM25: 0, VOC: 0, OZONE: 0 },
     ribbonColor: 0x445588,
     ribbonWidth: 0.5,
     ribbonOpacity: 0.6,
@@ -452,7 +452,8 @@ export const POINT_EMITTERS = [
     name: 'Golden Gate Bridge',
     profile: 'BRIDGE',
     scale: 1.0,
-    coords: { lon: -122.4783, lat: 37.8199 }
+    coords: { lon: -122.4783, lat: 37.8199 },
+    rotation: -60  // degrees counterclockwise (one hex angle left)
   },
   {
     id: 'richmond_bridge',
@@ -466,21 +467,22 @@ export const POINT_EMITTERS = [
     name: 'San Mateo-Hayward Bridge (CA-92)',
     profile: 'BRIDGE',
     scale: 0.9,
-    coords: { lon: -122.2502, lat: 37.5877 }
+    coords: { lon: -122.2000, lat: 37.5877 }
   },
   {
     id: 'dumbarton_bridge',
     name: 'Dumbarton Bridge (CA-84)',
     profile: 'BRIDGE',
     scale: 0.7,
-    coords: { lon: -122.1185, lat: 37.5074 }
+    coords: { lon: -122.0600, lat: 37.4900 }
   },
   {
     id: 'carquinez_bridge',
     name: 'Carquinez Bridge (I-80)',
     profile: 'BRIDGE',
     scale: 0.9,
-    coords: { lon: -122.2261, lat: 38.0614 }
+    coords: { lon: -122.2261, lat: 38.0614 },
+    rotation: -60  // degrees clockwise (one hex angle right)
   },
 
   // ═══════════════════════════════════════════
@@ -594,15 +596,19 @@ export const POINT_EMITTERS = [
 
 /**
  * All line-source emitters (highways) in the Bay Area network.
+ * Highways are visual only (no emissions) - landmarks handle emissions.
  * 
  * Each entry:
  *   id: unique identifier
  *   name: display name
- *   profile: key into EMITTER_PROFILES (must have emissionsPerKm)
- *   scale: multiplier for base emissions
+ *   profile: key into EMITTER_PROFILES
+ *   scale: multiplier (not used for emissions, kept for consistency)
  *   waypoints: array of { lon, lat, label } defining the route
  */
 export const LINE_EMITTERS = [
+  // ─────────────────────────────────────────
+  // INTERSTATE 80 (SF → Fairfield via Bay Bridge)
+  // ─────────────────────────────────────────
   {
     id: 'i80',
     name: 'Interstate 80',
@@ -622,6 +628,10 @@ export const LINE_EMITTERS = [
       { lon: -122.0400, lat: 38.2494, label: 'Fairfield' }
     ]
   },
+
+  // ─────────────────────────────────────────
+  // INTERSTATE 880 (Oakland → San Jose)
+  // ─────────────────────────────────────────
   {
     id: 'i880',
     name: 'Interstate 880',
@@ -636,6 +646,10 @@ export const LINE_EMITTERS = [
       { lon: -121.8863, lat: 37.3382, label: 'San Jose' }
     ]
   },
+
+  // ─────────────────────────────────────────
+  // INTERSTATE 680 (San Jose → Concord)
+  // ─────────────────────────────────────────
   {
     id: 'i680',
     name: 'Interstate 680',
@@ -653,6 +667,10 @@ export const LINE_EMITTERS = [
       { lon: -122.0311, lat: 37.9780, label: 'Concord' }
     ]
   },
+
+  // ─────────────────────────────────────────
+  // INTERSTATE 580 (Oakland → Livermore)
+  // ─────────────────────────────────────────
   {
     id: 'i580',
     name: 'Interstate 580',
@@ -666,9 +684,29 @@ export const LINE_EMITTERS = [
       { lon: -121.7681, lat: 37.6819, label: 'Livermore' }
     ]
   },
+
+  // ─────────────────────────────────────────
+  // INTERSTATE 580 WEST (Richmond-San Rafael Bridge)
+  // ─────────────────────────────────────────
   {
-    id: 'us101',
-    name: 'US Route 101',
+    id: 'i580_bridge',
+    name: 'I-580 (Richmond-San Rafael Bridge)',
+    profile: 'HIGHWAY_MAJOR',
+    scale: 0.8,
+    waypoints: [
+      { lon: -122.3570, lat: 37.9260, label: 'Richmond' },
+      { lon: -122.4200, lat: 37.9350, label: 'Richmond Bridge West' },
+      { lon: -122.4800, lat: 37.9450, label: 'San Quentin' },
+      { lon: -122.5097, lat: 37.9735, label: 'San Rafael' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // US ROUTE 101 SOUTH (SF → San Jose)
+  // ─────────────────────────────────────────
+  {
+    id: 'us101_south',
+    name: 'US-101 South',
     profile: 'HIGHWAY_MAJOR',
     scale: 1.1,
     waypoints: [
@@ -683,6 +721,33 @@ export const LINE_EMITTERS = [
       { lon: -121.8863, lat: 37.3382, label: 'San Jose' }
     ]
   },
+
+  // ─────────────────────────────────────────
+  // US ROUTE 101 NORTH (SF → Novato via Golden Gate)
+  // ─────────────────────────────────────────
+  {
+    id: 'us101_north',
+    name: 'US-101 North',
+    profile: 'HIGHWAY_MAJOR',
+    scale: 1.0,
+    waypoints: [
+      { lon: -122.4030, lat: 37.7870, label: 'SF Downtown' },
+      { lon: -122.4383, lat: 37.8025, label: 'Marina' },
+      { lon: -122.4750, lat: 37.8080, label: 'Presidio' },
+      { lon: -122.4785, lat: 37.8199, label: 'Golden Gate Bridge South' },
+      { lon: -122.4785, lat: 37.8324, label: 'Golden Gate Bridge North' },
+      { lon: -122.4811, lat: 37.8500, label: 'Sausalito' },
+      { lon: -122.4932, lat: 37.8882, label: 'Mill Valley' },
+      { lon: -122.5180, lat: 37.9340, label: 'Corte Madera' },
+      { lon: -122.5097, lat: 37.9735, label: 'San Rafael' },
+      { lon: -122.5350, lat: 38.0180, label: 'Terra Linda' },
+      { lon: -122.5697, lat: 38.1074, label: 'Novato' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // INTERSTATE 280 (SF → San Jose via Peninsula)
+  // ─────────────────────────────────────────
   {
     id: 'i280',
     name: 'Interstate 280',
@@ -693,10 +758,16 @@ export const LINE_EMITTERS = [
       { lon: -122.4702, lat: 37.6879, label: 'Daly City' },
       { lon: -122.4350, lat: 37.6305, label: 'San Bruno' },
       { lon: -122.3800, lat: 37.5600, label: 'Hillsborough' },
+      { lon: -122.2900, lat: 37.4800, label: 'Woodside' },
+      { lon: -122.1800, lat: 37.4000, label: 'Los Altos Hills' },
       { lon: -122.0322, lat: 37.3230, label: 'Cupertino' },
       { lon: -121.9500, lat: 37.3200, label: 'San Jose' }
     ]
   },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 37 (Vallejo → Novato)
+  // ─────────────────────────────────────────
   {
     id: 'ca37',
     name: 'Highway 37',
@@ -706,6 +777,185 @@ export const LINE_EMITTERS = [
       { lon: -122.2566, lat: 38.1041, label: 'Vallejo' },
       { lon: -122.4500, lat: 38.1600, label: 'Sears Point' },
       { lon: -122.5697, lat: 38.1074, label: 'Novato' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 92 (San Mateo Bridge)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca92',
+    name: 'Highway 92 (San Mateo Bridge)',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.6,
+    waypoints: [
+      { lon: -122.3255, lat: 37.5630, label: 'San Mateo' },
+      { lon: -122.2800, lat: 37.5700, label: 'Foster City' },
+      { lon: -122.2100, lat: 37.5800, label: 'Bridge West' },
+      { lon: -122.1300, lat: 37.5900, label: 'Bridge East' },
+      { lon: -122.0808, lat: 37.6688, label: 'Hayward' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 84 (Dumbarton Bridge)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca84',
+    name: 'Highway 84 (Dumbarton Bridge)',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.6,
+    waypoints: [
+      { lon: -122.1430, lat: 37.4419, label: 'Palo Alto' },
+      { lon: -122.1200, lat: 37.4700, label: 'Menlo Park' },
+      { lon: -122.0700, lat: 37.4900, label: 'Bridge West' },
+      { lon: -122.0200, lat: 37.5100, label: 'Bridge East' },
+      { lon: -121.9886, lat: 37.5485, label: 'Fremont' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 1 (Pacific Coast Highway - Pacifica to SF)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca1_south',
+    name: 'Highway 1 South',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.5,
+    waypoints: [
+      { lon: -122.4920, lat: 37.7749, label: 'SF (Great Highway)' },
+      { lon: -122.5050, lat: 37.7200, label: 'Daly City Coast' },
+      { lon: -122.4970, lat: 37.6500, label: 'Pacifica' },
+      { lon: -122.4800, lat: 37.5700, label: 'Montara' },
+      { lon: -122.4500, lat: 37.5050, label: 'Half Moon Bay' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 1 NORTH (SF through Marin)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca1_north',
+    name: 'Highway 1 North',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.5,
+    waypoints: [
+      { lon: -122.4920, lat: 37.7749, label: 'SF (Great Highway)' },
+      { lon: -122.4785, lat: 37.8324, label: 'Golden Gate Bridge North' },
+      { lon: -122.5200, lat: 37.8600, label: 'Marin Headlands' },
+      { lon: -122.5800, lat: 37.8900, label: 'Muir Beach' },
+      { lon: -122.6200, lat: 37.9200, label: 'Stinson Beach' },
+      { lon: -122.6800, lat: 37.9600, label: 'Bolinas' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 24 (Oakland → Walnut Creek through Caldecott Tunnel)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca24',
+    name: 'Highway 24',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.6,
+    waypoints: [
+      { lon: -122.2500, lat: 37.8100, label: 'Oakland' },
+      { lon: -122.2100, lat: 37.8400, label: 'Piedmont' },
+      { lon: -122.1700, lat: 37.8600, label: 'Orinda' },
+      { lon: -122.1200, lat: 37.8800, label: 'Lafayette' },
+      { lon: -122.0652, lat: 37.9101, label: 'Walnut Creek' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 4 (Concord → Antioch)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca4',
+    name: 'Highway 4',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.5,
+    waypoints: [
+      { lon: -122.0311, lat: 37.9780, label: 'Concord' },
+      { lon: -121.9500, lat: 37.9800, label: 'Pittsburg' },
+      { lon: -121.8000, lat: 38.0000, label: 'Antioch' },
+      { lon: -121.6200, lat: 38.0100, label: 'Brentwood' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 17 (San Jose → Santa Cruz)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca17',
+    name: 'Highway 17',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.5,
+    waypoints: [
+      { lon: -121.9500, lat: 37.3200, label: 'San Jose' },
+      { lon: -121.9800, lat: 37.2600, label: 'Los Gatos' },
+      { lon: -122.0200, lat: 37.2000, label: 'Summit' },
+      { lon: -122.0300, lat: 37.1000, label: 'Scotts Valley' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // INTERSTATE 880 / HIGHWAY 17 CONNECTOR (Oakland to Hayward)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca238',
+    name: 'Highway 238',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.4,
+    waypoints: [
+      { lon: -122.0864, lat: 37.6940, label: 'Castro Valley' },
+      { lon: -122.0808, lat: 37.6688, label: 'Hayward' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // INTERSTATE 980 (Oakland Downtown Connector)
+  // ─────────────────────────────────────────
+  {
+    id: 'i980',
+    name: 'Interstate 980',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.4,
+    waypoints: [
+      { lon: -122.2712, lat: 37.8044, label: 'Oakland (I-880)' },
+      { lon: -122.2750, lat: 37.8150, label: 'Downtown Oakland' },
+      { lon: -122.2650, lat: 37.8250, label: 'Oakland (I-580)' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 87 (San Jose Downtown)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca87',
+    name: 'Highway 87',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.4,
+    waypoints: [
+      { lon: -121.8863, lat: 37.3382, label: 'San Jose (US-101)' },
+      { lon: -121.8900, lat: 37.3100, label: 'Downtown San Jose' },
+      { lon: -121.8950, lat: 37.2800, label: 'San Jose South' }
+    ]
+  },
+
+  // ─────────────────────────────────────────
+  // HIGHWAY 85 (Cupertino to Mountain View loop)
+  // ─────────────────────────────────────────
+  {
+    id: 'ca85',
+    name: 'Highway 85',
+    profile: 'HIGHWAY_MINOR',
+    scale: 0.5,
+    waypoints: [
+      { lon: -122.0839, lat: 37.3861, label: 'Mountain View' },
+      { lon: -122.0500, lat: 37.3500, label: 'Sunnyvale' },
+      { lon: -122.0322, lat: 37.3230, label: 'Cupertino' },
+      { lon: -122.0100, lat: 37.2900, label: 'Saratoga' },
+      { lon: -121.9800, lat: 37.2600, label: 'Los Gatos' }
     ]
   }
 ];

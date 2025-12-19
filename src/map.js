@@ -1,5 +1,5 @@
 /**
- * map.js ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Terrain + landmarks + coordinate conventions
+ * map.js  Terrain + landmarks + coordinate conventions
  * 
  * Builds the Bay Area world representation using real elevation data from GeoTIFF.
  * Owns: terrain mesh, water plane, landmark meshes, coordinate mapping
@@ -72,7 +72,7 @@ async function parseGeoTIFF(arrayBuffer) {
     }
   }
   
-  console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ TIFF: ${width}x${height}, ${bitsPerSample}-bit, format=${sampleFormat}`);
+  console.log(`    TIFF: ${width}x${height}, ${bitsPerSample}-bit, format=${sampleFormat}`);
   
   // Read the raster data
   const pixelCount = width * height;
@@ -101,7 +101,7 @@ async function parseGeoTIFF(arrayBuffer) {
 // Constants & Configuration
 // ============================================
 
-// World scale: 1 unit ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  1 km
+// World scale: 1 unit = approx 1 km
 const WORLD_SCALE = 1;
 
 // Bay Area bounds (accurate to TIFF coverage)
@@ -147,7 +147,7 @@ let highwayGroup = null;  // Highway ribbon meshes
 function smoothElevationData(data, width, height, passes = 1) {
   if (passes <= 0) return data;
   
-  console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Smoothing elevation data (${passes} passes)...`);
+  console.log(`    Smoothing elevation data (${passes} passes)...`);
   
   let current = new Float32Array(data);
   let next = new Float32Array(data.length);
@@ -211,7 +211,7 @@ function smoothElevationData(data, width, height, passes = 1) {
 // ============================================
 
 export function initMap(scene) {
-  console.log('ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â Building Bay Area map...');
+  console.log('[Map] Building Bay Area map...');
   
   // Load GeoTIFF and create terrain
   loadGeoTIFFAndCreateTerrain(scene);
@@ -233,7 +233,7 @@ export function initMap(scene) {
 
 async function loadGeoTIFFAndCreateTerrain(scene) {
   try {
-    console.log('  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Loading GeoTIFF...');
+    console.log('    Loading GeoTIFF...');
     
     // Fetch the TIFF file
     const response = await fetch(TERRAIN_CONFIG.heightmapUrl);
@@ -258,7 +258,7 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
       TERRAIN_CONFIG.smoothingPasses
     );
     
-    console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ GeoTIFF loaded: ${rasterWidth}x${rasterHeight}`);
+    console.log(`    GeoTIFF loaded: ${rasterWidth}x${rasterHeight}`);
     
     // Find min/max elevation for normalization info
     for (let i = 0; i < elevationData.length; i++) {
@@ -269,7 +269,7 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
       }
     }
     
-    console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Elevation range: ${minElevation.toFixed(1)}m to ${maxElevation.toFixed(1)}m`);
+    console.log(`    Elevation range: ${minElevation.toFixed(1)}m to ${maxElevation.toFixed(1)}m`);
     
     // Create terrain mesh
     createTerrainFromGeoTIFF(scene);
@@ -278,8 +278,8 @@ async function loadGeoTIFFAndCreateTerrain(scene) {
     createLandmarks(scene);
     
   } catch (error) {
-    console.error('  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Failed to load GeoTIFF:', error);
-    console.log('  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Falling back to procedural terrain');
+    console.error('    Failed to load GeoTIFF:', error);
+    console.log('    Falling back to procedural terrain');
     createProceduralTerrain(scene);
     createLandmarks(scene);
   }
@@ -308,7 +308,7 @@ function createTerrainFromGeoTIFF(scene) {
   const positions = geometry.attributes.position;
   
   // Delta basin elevation adjustment region
-  // 121.8Â°W to 121.4Â°W AND 37.6Â°N to 38.4Â°N
+  // 121.8°W to 121.4°W AND 37.6°N to 38.4°N
   const deltaRegion = {
     lonMin: -121.8,
     lonMax: -121.4,
@@ -381,7 +381,7 @@ function createTerrainFromGeoTIFF(scene) {
   terrain.castShadow = true;
   scene.add(terrain);
   
-  console.log(`  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Terrain created: ${rasterWidth}x${rasterHeight} vertices`);
+  console.log(`    Terrain created: ${rasterWidth}x${rasterHeight} vertices`);
 }
 
 // Convert raw elevation (meters) to world Y coordinate
@@ -448,7 +448,7 @@ function sampleElevation(worldX, worldZ) {
   const lon = GEO_BOUNDS.lonMin + clampedU * (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin);
   const lat = GEO_BOUNDS.latMax - clampedV * (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin);
   
-  // Delta region: 121.8Â°W to 121.4Â°W AND 37.6Â°N to 38.4Â°N with smooth blending
+  // Delta region: 121.8°W to 121.4°W AND 37.6°N to 38.4°N with smooth blending
   const deltaLonMin = -121.8, deltaLonMax = -121.4;
   const deltaLatMin = 37.6, deltaLatMax = 38.4;
   const blendDist = 0.1;
@@ -628,6 +628,12 @@ function createLandmarks(scene) {
     // Create group for this landmark
     const group = new THREE.Group();
     group.position.set(worldCoords.x, terrainH, worldCoords.z);
+    
+    // Apply rotation if specified (in degrees)
+    if (emitter.rotation) {
+      group.rotation.y = emitter.rotation * (Math.PI / 180);
+    }
+    
     group.userData = { 
       id: emitter.id, 
       name: emitter.name,
@@ -1363,7 +1369,7 @@ function createCompassRose(parentGroup, halfWidth, halfDepth, gridY) {
     return { x, z };
   };
   
-  // Position at 37.5Â°N, 122.8Â°W
+  // Position at 37.5°N, 122.8°W
   const compassPos = geoToWorldLocal(-122.8, 37.5);
   const compassX = compassPos.x;
   const compassZ = compassPos.z;
@@ -1548,7 +1554,7 @@ function createCompassRose(parentGroup, halfWidth, halfDepth, gridY) {
   
   parentGroup.add(compassGroup);
   
-  console.log(`[Grid] Compass rose created at 37.5Â°N, 122.8Â°W (world: ${compassX.toFixed(1)}, ${compassY.toFixed(1)}, ${compassZ.toFixed(1)})`);
+  console.log(`[Grid] Compass rose created at 37.5°N, 122.8°W (world: ${compassX.toFixed(1)}, ${compassY.toFixed(1)}, ${compassZ.toFixed(1)})`);
 }
 
 /**
@@ -1677,7 +1683,7 @@ function formatLongitude(lon) {
   const rounded = Math.round(lon * 10) / 10;
   const abs = Math.abs(rounded);
   const dir = rounded < 0 ? 'W' : 'E';
-  return `${abs.toFixed(1)}Â°${dir}`;
+  return `${abs.toFixed(1)}°${dir}`;
 }
 
 /**
@@ -1688,7 +1694,7 @@ function formatLatitude(lat) {
   const rounded = Math.round(lat * 10) / 10;
   const abs = Math.abs(rounded);
   const dir = rounded < 0 ? 'S' : 'N';
-  return `${abs.toFixed(1)}Â°${dir}`;
+  return `${abs.toFixed(1)}°${dir}`;
 }
 
 /**
