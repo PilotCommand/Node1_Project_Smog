@@ -1141,53 +1141,20 @@ export function geoToWorld(lon, lat) {
 // ============================================
 
 function createAtmosphericEffects(scene) {
-  // Horizon glow
-  const horizonGeo = new THREE.RingGeometry(80, 200, 64);
-  horizonGeo.rotateX(-Math.PI / 2);
-  const horizonMat = new THREE.MeshBasicMaterial({
+  // Ground disc - solid plane that sits below the terrain
+  const discRadius = 250;
+  
+  const groundGeo = new THREE.CircleGeometry(discRadius, 64);
+  groundGeo.rotateX(-Math.PI / 2);
+  const groundMat = new THREE.MeshBasicMaterial({
     color: 0x1a2a3a,
     transparent: true,
     opacity: 0.5,
     side: THREE.DoubleSide
   });
-  const horizon = new THREE.Mesh(horizonGeo, horizonMat);
-  horizon.position.y = -2;
-  scene.add(horizon);
-  
-  // Distant mountains silhouette (background)
-  const mountainGeometry = new THREE.BufferGeometry();
-  const mountainVertices = [];
-  const mountainCount = 30;
-  
-  for (let i = 0; i < mountainCount; i++) {
-    const angle = (i / mountainCount) * Math.PI * 2;
-    const radius = 90 + Math.random() * 20;
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    const height = 5 + Math.random() * 15;
-    
-    // Triangle for each "peak"
-    mountainVertices.push(
-      x - 5, 0, z,
-      x + 5, 0, z,
-      x, height, z
-    );
-  }
-  
-  mountainGeometry.setAttribute('position', 
-    new THREE.Float32BufferAttribute(mountainVertices, 3)
-  );
-  mountainGeometry.computeVertexNormals();
-  
-  const mountainMaterial = new THREE.MeshBasicMaterial({
-    color: 0x0a0a15,
-    transparent: true,
-    opacity: 0.6,
-    side: THREE.DoubleSide
-  });
-  
-  const mountains = new THREE.Mesh(mountainGeometry, mountainMaterial);
-  scene.add(mountains);
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.position.y = -2;
+  scene.add(ground);
 }
 
 // ============================================
