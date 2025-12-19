@@ -1,5 +1,5 @@
 /**
- * sky.js â€” Dynamic sky and lighting system
+ * sky.js Ã¢â‚¬â€ Dynamic sky and lighting system
  * 
  * Handles time-of-day transitions with changing sky colors,
  * sun/moon positioning, and atmospheric lighting.
@@ -30,9 +30,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0x1a2a3a),
     fog: new THREE.Color(0x0a0a12),
     ambient: new THREE.Color(0x1a1a2e),
-    ambientIntensity: 0.3,
+    ambientIntensity: 0.6,
     sunColor: new THREE.Color(0x4466aa),
-    sunIntensity: 0.1,
+    sunIntensity: 0.2,
     sunPosition: new THREE.Vector3(0, -50, 0)
   },
   5: {  // Pre-dawn
@@ -41,9 +41,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0x4a3a5a),
     fog: new THREE.Color(0x1a1a2a),
     ambient: new THREE.Color(0x2a2a3e),
-    ambientIntensity: 0.4,
+    ambientIntensity: 0.8,
     sunColor: new THREE.Color(0x6688bb),
-    sunIntensity: 0.2,
+    sunIntensity: 0.4,
     sunPosition: new THREE.Vector3(-80, -20, 30)
   },
   6: {  // Dawn
@@ -52,9 +52,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0xff7744),
     fog: new THREE.Color(0x3a3a4a),
     ambient: new THREE.Color(0x4a4a5e),
-    ambientIntensity: 0.5,
+    ambientIntensity: 1.0,
     sunColor: new THREE.Color(0xff8855),
-    sunIntensity: 0.6,
+    sunIntensity: 1.0,
     sunPosition: new THREE.Vector3(-80, 10, 30)
   },
   7: {  // Early morning
@@ -63,9 +63,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0xffaa66),
     fog: new THREE.Color(0x5a5a6a),
     ambient: new THREE.Color(0x6a6a7e),
-    ambientIntensity: 0.6,
+    ambientIntensity: 1.2,
     sunColor: new THREE.Color(0xffaa77),
-    sunIntensity: 0.9,
+    sunIntensity: 1.5,
     sunPosition: new THREE.Vector3(-60, 30, 30)
   },
   9: {  // Morning
@@ -74,9 +74,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0xaaccee),
     fog: new THREE.Color(0x6688aa),
     ambient: new THREE.Color(0x8899aa),
-    ambientIntensity: 0.7,
+    ambientIntensity: 1.4,
     sunColor: new THREE.Color(0xffeedd),
-    sunIntensity: 1.1,
+    sunIntensity: 1.8,
     sunPosition: new THREE.Vector3(-40, 60, 30)
   },
   12: { // Midday
@@ -85,9 +85,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0xaaddff),
     fog: new THREE.Color(0x5588bb),
     ambient: new THREE.Color(0x99aacc),
-    ambientIntensity: 0.8,
+    ambientIntensity: 1.6,
     sunColor: new THREE.Color(0xffffee),
-    sunIntensity: 1.3,
+    sunIntensity: 2.2,
     sunPosition: new THREE.Vector3(0, 80, 30)
   },
   15: { // Afternoon
@@ -96,9 +96,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0xccddee),
     fog: new THREE.Color(0x6699bb),
     ambient: new THREE.Color(0x8899aa),
-    ambientIntensity: 0.75,
+    ambientIntensity: 1.5,
     sunColor: new THREE.Color(0xffeedd),
-    sunIntensity: 1.2,
+    sunIntensity: 2.0,
     sunPosition: new THREE.Vector3(40, 60, 30)
   },
   17: { // Late afternoon
@@ -107,9 +107,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0xffcc88),
     fog: new THREE.Color(0x7788aa),
     ambient: new THREE.Color(0x8888aa),
-    ambientIntensity: 0.65,
+    ambientIntensity: 1.3,
     sunColor: new THREE.Color(0xffcc88),
-    sunIntensity: 1.0,
+    sunIntensity: 1.6,
     sunPosition: new THREE.Vector3(60, 40, 30)
   },
   19: { // Dusk
@@ -118,9 +118,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0xff6633),
     fog: new THREE.Color(0x4a4a5a),
     ambient: new THREE.Color(0x5a5a6e),
-    ambientIntensity: 0.5,
+    ambientIntensity: 1.0,
     sunColor: new THREE.Color(0xff7744),
-    sunIntensity: 0.7,
+    sunIntensity: 1.2,
     sunPosition: new THREE.Vector3(80, 10, 30)
   },
   20: { // Twilight
@@ -129,9 +129,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0x884466),
     fog: new THREE.Color(0x2a2a3a),
     ambient: new THREE.Color(0x3a3a4e),
-    ambientIntensity: 0.4,
+    ambientIntensity: 0.8,
     sunColor: new THREE.Color(0x6666aa),
-    sunIntensity: 0.3,
+    sunIntensity: 0.6,
     sunPosition: new THREE.Vector3(80, -10, 30)
   },
   22: { // Night
@@ -140,9 +140,9 @@ const SKY_PRESETS = {
     horizon: new THREE.Color(0x2a2a3a),
     fog: new THREE.Color(0x0a0a12),
     ambient: new THREE.Color(0x1a1a2e),
-    ambientIntensity: 0.3,
+    ambientIntensity: 0.6,
     sunColor: new THREE.Color(0x4466aa),
-    sunIntensity: 0.15,
+    sunIntensity: 0.3,
     sunPosition: new THREE.Vector3(0, -30, 0)
   }
 };
@@ -175,7 +175,7 @@ const currentColors = {
 // ============================================
 
 export function initSky(sceneRef) {
-  console.log('ðŸŒ… Initializing sky system...');
+  console.log('Ã°Å¸Å’â€¦ Initializing sky system...');
   scene = sceneRef;
   
   createSkyDome();

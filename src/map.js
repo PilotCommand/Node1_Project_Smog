@@ -316,6 +316,17 @@ function createTerrainFromGeoTIFF(scene) {
   
   const positions = geometry.attributes.position;
   
+  // Delta basin elevation adjustment region
+  // 121.8°W to 121.4°W AND 37.6°N to 38.4°N
+  const deltaRegion = {
+    lonMin: -121.8,
+    lonMax: -121.4,
+    latMin: 37.6,
+    latMax: 38.4,
+    elevationBoost: 0.01,  // 1% of max terrain height
+    blendDistance: 0.1     // Degrees to blend at edges
+  };
+  
   // PlaneGeometry vertex order is row-major: (segmentsX+1) x (segmentsZ+1)
   // which equals rasterWidth x rasterHeight
   for (let i = 0; i < positions.count; i++) {
@@ -329,7 +340,35 @@ function createTerrainFromGeoTIFF(scene) {
     
     // Get elevation and convert to world height
     const elevation = elevationData[srcIndex];
-    const height = elevationToWorldY(elevation);
+    let height = elevationToWorldY(elevation);
+    
+    // Calculate geographic coordinates for this vertex
+    const u = gridX / (rasterWidth - 1);  // 0 to 1 across width
+    const v = gridZ / (rasterHeight - 1); // 0 to 1 across depth
+    
+    const lon = GEO_BOUNDS.lonMin + u * (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin);
+    const lat = GEO_BOUNDS.latMax - v * (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin); // Flip for GeoTIFF
+    
+    // Apply elevation boost in delta region with smooth blending
+    if (lon >= deltaRegion.lonMin - deltaRegion.blendDistance && 
+        lon <= deltaRegion.lonMax + deltaRegion.blendDistance &&
+        lat >= deltaRegion.latMin - deltaRegion.blendDistance && 
+        lat <= deltaRegion.latMax + deltaRegion.blendDistance) {
+      
+      // Calculate blend factor for each edge (0 at edge, 1 fully inside)
+      const blendLeft = Math.min(1, Math.max(0, (lon - (deltaRegion.lonMin - deltaRegion.blendDistance)) / deltaRegion.blendDistance));
+      const blendRight = Math.min(1, Math.max(0, ((deltaRegion.lonMax + deltaRegion.blendDistance) - lon) / deltaRegion.blendDistance));
+      const blendBottom = Math.min(1, Math.max(0, (lat - (deltaRegion.latMin - deltaRegion.blendDistance)) / deltaRegion.blendDistance));
+      const blendTop = Math.min(1, Math.max(0, ((deltaRegion.latMax + deltaRegion.blendDistance) - lat) / deltaRegion.blendDistance));
+      
+      // Combine blend factors (smoothstep for smoother transition)
+      const smoothstep = (t) => t * t * (3 - 2 * t);
+      const blendFactor = smoothstep(blendLeft) * smoothstep(blendRight) * smoothstep(blendBottom) * smoothstep(blendTop);
+      
+      // Add blended boost
+      const boost = MAP_BOUNDS.maxHeight * deltaRegion.elevationBoost * blendFactor;
+      height += boost;
+    }
     
     positions.setY(i, height);
   }
@@ -339,7 +378,7 @@ function createTerrainFromGeoTIFF(scene) {
   
   // Terrain material
   const material = new THREE.MeshStandardMaterial({
-    color: 0x2d4a3e,
+    color: 0x5a8a6e,
     roughness: 0.85,
     metalness: 0.1,
     flatShading: false,
@@ -409,9 +448,37 @@ function sampleElevation(worldX, worldZ) {
   // Bilinear interpolation
   const top = e00 * (1 - fx) + e10 * fx;
   const bottom = e01 * (1 - fx) + e11 * fx;
-  const elevation = top * (1 - fz) + bottom * fz;
+  let elevation = top * (1 - fz) + bottom * fz;
   
-  return elevation * TERRAIN_CONFIG.verticalScale;
+  let height = elevation * TERRAIN_CONFIG.verticalScale;
+  
+  // Apply delta basin elevation boost
+  // Convert world coords to geographic
+  const lon = GEO_BOUNDS.lonMin + clampedU * (GEO_BOUNDS.lonMax - GEO_BOUNDS.lonMin);
+  const lat = GEO_BOUNDS.latMax - clampedV * (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin);
+  
+  // Delta region: 121.8°W to 121.4°W AND 37.6°N to 38.4°N with smooth blending
+  const deltaLonMin = -121.8, deltaLonMax = -121.4;
+  const deltaLatMin = 37.6, deltaLatMax = 38.4;
+  const blendDist = 0.1;
+  
+  if (lon >= deltaLonMin - blendDist && lon <= deltaLonMax + blendDist &&
+      lat >= deltaLatMin - blendDist && lat <= deltaLatMax + blendDist) {
+    
+    // Calculate blend factor for each edge
+    const blendLeft = Math.min(1, Math.max(0, (lon - (deltaLonMin - blendDist)) / blendDist));
+    const blendRight = Math.min(1, Math.max(0, ((deltaLonMax + blendDist) - lon) / blendDist));
+    const blendBottom = Math.min(1, Math.max(0, (lat - (deltaLatMin - blendDist)) / blendDist));
+    const blendTop = Math.min(1, Math.max(0, ((deltaLatMax + blendDist) - lat) / blendDist));
+    
+    // Smoothstep for smoother transition
+    const smoothstep = (t) => t * t * (3 - 2 * t);
+    const blendFactor = smoothstep(blendLeft) * smoothstep(blendRight) * smoothstep(blendBottom) * smoothstep(blendTop);
+    
+    height += MAP_BOUNDS.maxHeight * 0.01 * blendFactor; // 1% boost with blend
+  }
+  
+  return height;
 }
 
 // ============================================
@@ -467,7 +534,7 @@ function createProceduralTerrain(scene) {
   geometry.computeVertexNormals();
   
   const material = new THREE.MeshStandardMaterial({
-    color: 0x2d4a3e,
+    color: 0x5a8a6e,
     roughness: 0.9,
     metalness: 0.1,
     flatShading: false,
@@ -504,7 +571,7 @@ function createWater(scene) {
   waterGeometry.computeVertexNormals();
   
   const waterMaterial = new THREE.MeshStandardMaterial({
-    color: 0x1a4a5a,
+    color: 0x3a8aaa,
     roughness: 0.1,
     metalness: 0.8,
     transparent: true,
@@ -524,9 +591,9 @@ function createWater(scene) {
   );
   glowGeometry.rotateX(-Math.PI / 2);
   const glowMaterial = new THREE.MeshBasicMaterial({
-    color: 0x0055aa,
+    color: 0x2288cc,
     transparent: true,
-    opacity: 0.2,
+    opacity: 0.3,
   });
   const glow = new THREE.Mesh(glowGeometry, glowMaterial);
   glow.position.set(0, TERRAIN_CONFIG.waterLevel - 1, 0);
@@ -1147,9 +1214,9 @@ function createAtmosphericEffects(scene) {
   const groundGeo = new THREE.CircleGeometry(discRadius, 64);
   groundGeo.rotateX(-Math.PI / 2);
   const groundMat = new THREE.MeshBasicMaterial({
-    color: 0x1a2a3a,
+    color: 0x2a4a5a,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.6,
     side: THREE.DoubleSide
   });
   const ground = new THREE.Mesh(groundGeo, groundMat);
